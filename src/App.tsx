@@ -8,7 +8,7 @@ import {
   createExpense,
   formatMoney,
 } from './lib/calculator'
-import { loadState, saveState } from './lib/storage'
+import { clearSavedState, loadState, saveState } from './lib/storage'
 import type { AppState, Debt, Expense, PayStrategy } from './types'
 
 function numVal(raw: string): number {
@@ -19,6 +19,8 @@ function numVal(raw: string): number {
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadState())
   const plan = buildMonthPlan(state)
+  const hasAnyData =
+    state.income > 0 || state.debts.length > 0 || state.expenses.length > 0
 
   useEffect(() => {
     saveState(state)
@@ -59,37 +61,58 @@ export default function App() {
           </span>
           <div>
             <p className="brand-name">Cove</p>
-            <p className="brand-tag">Debt covered. Money left.</p>
+            <p className="brand-tag">Pay your debts. Keep what’s left.</p>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => {
-            if (confirm('Reset to sample data?')) {
-              localStorage.removeItem('cove-debt-planner-v1')
-              setState(loadState())
-            }
-          }}
-        >
-          Reset sample
-        </button>
+        {hasAnyData && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              if (confirm('Clear everything and start over?')) {
+                clearSavedState()
+                setState(loadState())
+              }
+            }}
+          >
+            Clear all
+          </button>
+        )}
       </header>
 
       <main>
         <section className="hero">
           <h1 className="hero-brand">Cove</h1>
           <p className="hero-line">
-            Spread your debts and bills like a sheet. Cove pays every minimum,
-            aims extra where it hurts interest most, and shows what stays in your
-            pocket.
+            Enter what you earn, what you spend, and what you owe. Cove tells you
+            exactly what to pay each month — and how much you still get to keep.
           </p>
         </section>
 
+        <ol className="how-to" aria-label="How to use Cove">
+          <li>
+            <strong>1. Income</strong>
+            <span>How much money you get each month</span>
+          </li>
+          <li>
+            <strong>2. Bills</strong>
+            <span>Rent, food, and other living costs</span>
+          </li>
+          <li>
+            <strong>3. Debts</strong>
+            <span>Credit cards, loans, and minimums</span>
+          </li>
+          <li>
+            <strong>4. Plan</strong>
+            <span>See what to pay and what’s left</span>
+          </li>
+        </ol>
+
         <section className="income-panel" aria-labelledby="income-heading">
           <div className="income-copy">
-            <h2 id="income-heading">Monthly income</h2>
-            <p>Take-home pay that funds bills and debt this month.</p>
+            <p className="step-label">Step 1</p>
+            <h2 id="income-heading">Your monthly income</h2>
+            <p>Put the money you actually take home each month.</p>
           </div>
           <label className="income-field">
             <span className="sr-only">Monthly income</span>
@@ -105,55 +128,32 @@ export default function App() {
           </label>
           <dl className="income-meta">
             <div>
-              <dt>After bills</dt>
+              <dt>Left after bills</dt>
               <dd>{formatMoney(plan.availableForDebt)}</dd>
             </div>
             <div>
-              <dt>Minimums needed</dt>
+              <dt>Debt minimums</dt>
               <dd>{formatMoney(plan.minimumsTotal)}</dd>
             </div>
             <div>
-              <dt>Buffer</dt>
+              <dt>You keep</dt>
               <dd className={plan.canCoverMinimums ? 'ok' : 'bad'}>
                 {plan.canCoverMinimums
                   ? formatMoney(plan.leftover)
-                  : `−${formatMoney(plan.shortfall)}`}
+                  : `Need ${formatMoney(plan.shortfall)} more`}
               </dd>
             </div>
           </dl>
         </section>
 
         <div className="workspace">
-          <DebtSheet
-            debts={state.debts}
-            onChange={updateDebt}
-            onAdd={() =>
-              setState((prev) => ({
-                ...prev,
-                debts: [
-                  ...prev.debts,
-                  createDebt({ name: 'New debt', dueDay: 1 }),
-                ],
-              }))
-            }
-            onRemove={(id) =>
-              setState((prev) => ({
-                ...prev,
-                debts: prev.debts.filter((d) => d.id !== id),
-              }))
-            }
-          />
-
           <ExpenseSheet
             expenses={state.expenses}
             onChange={updateExpense}
             onAdd={() =>
               setState((prev) => ({
                 ...prev,
-                expenses: [
-                  ...prev.expenses,
-                  createExpense({ name: 'New bill' }),
-                ],
+                expenses: [...prev.expenses, createExpense()],
               }))
             }
             onRemove={(id) =>
@@ -163,11 +163,30 @@ export default function App() {
               }))
             }
           />
+
+          <DebtSheet
+            debts={state.debts}
+            onChange={updateDebt}
+            onAdd={() =>
+              setState((prev) => ({
+                ...prev,
+                debts: [...prev.debts, createDebt({ dueDay: 1 })],
+              }))
+            }
+            onRemove={(id) =>
+              setState((prev) => ({
+                ...prev,
+                debts: prev.debts.filter((d) => d.id !== id),
+              }))
+            }
+          />
         </div>
 
         <PlanSummary
           plan={plan}
           strategy={state.strategy}
+          hasIncome={state.income > 0}
+          hasDebts={state.debts.length > 0}
           onStrategyChange={(strategy: PayStrategy) =>
             setState((prev) => ({ ...prev, strategy }))
           }
@@ -175,11 +194,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <p>
-          Cove keeps minimums sacred, then stacks extras with{' '}
-          {state.strategy === 'avalanche' ? 'avalanche' : 'snowball'} logic.
-          Numbers stay on this device.
-        </p>
+        <p>Your numbers stay on this phone or computer. Nothing is uploaded.</p>
       </footer>
     </div>
   )

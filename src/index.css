@@ -192,6 +192,48 @@ button {
   line-height: 1.55;
 }
 
+.how-to {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.65rem;
+  animation: rise 0.8s ease both 0.12s;
+}
+
+.how-to li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(15, 107, 92, 0.1);
+}
+
+.how-to strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  color: var(--teal-deep);
+}
+
+.how-to span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.step-label {
+  margin: 0 0 0.2rem;
+  color: var(--teal);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .income-panel {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1.4fr;
@@ -533,6 +575,12 @@ button {
   border: 1px solid rgba(27, 122, 74, 0.16);
 }
 
+.alert-hint {
+  background: rgba(15, 107, 92, 0.07);
+  color: var(--ink-soft);
+  border: 1px solid rgba(15, 107, 92, 0.12);
+}
+
 .debt-cell {
   display: flex;
   flex-direction: column;
@@ -625,6 +673,10 @@ button {
   .stat-row {
     grid-template-columns: 1fr 1fr;
   }
+
+  .how-to {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -707,6 +759,10 @@ button {
 
   .strategy-toggle {
     width: 100%;
+  }
+
+  .how-to {
+    grid-template-columns: 1fr;
   }
 }
 

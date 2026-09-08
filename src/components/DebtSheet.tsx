@@ -18,8 +18,12 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
     <section className="sheet" aria-labelledby="debts-heading">
       <div className="sheet-head">
         <div>
-          <h2 id="debts-heading">Debts</h2>
-          <p>Balances, rates, and the minimum you must pay to stay current.</p>
+          <p className="step-label">Step 3</p>
+          <h2 id="debts-heading">Your debts</h2>
+          <p>
+            Add each debt you owe. <em>Minimum</em> is the least you must pay to
+            stay current.
+          </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={onAdd}>
           + Add debt
@@ -31,9 +35,9 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
           <thead>
             <tr>
               <th scope="col">Name</th>
-              <th scope="col">Balance</th>
-              <th scope="col">APR %</th>
-              <th scope="col">Min. payment</th>
+              <th scope="col">Still owed</th>
+              <th scope="col">Interest %</th>
+              <th scope="col">Minimum due</th>
               <th scope="col">Due day</th>
               <th scope="col" className="col-action">
                 <span className="sr-only">Remove</span>
@@ -44,7 +48,8 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
             {debts.length === 0 ? (
               <tr>
                 <td colSpan={6} className="empty-row">
-                  No debts yet — add one to start your plan.
+                  Tap <strong>+ Add debt</strong> for cards, loans, or anything you
+                  still owe.
                 </td>
               </tr>
             ) : (
@@ -54,12 +59,12 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
                     <input
                       className="cell-input"
                       value={debt.name}
-                      placeholder="Debt name"
+                      placeholder="e.g. Credit card"
                       onChange={(e) => onChange(debt.id, 'name', e.target.value)}
                       aria-label="Debt name"
                     />
                   </td>
-                  <td data-label="Balance">
+                  <td data-label="Still owed">
                     <div className="input-prefix">
                       <span>$</span>
                       <input
@@ -74,7 +79,7 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
                       />
                     </div>
                   </td>
-                  <td data-label="APR %">
+                  <td data-label="Interest %">
                     <input
                       className="cell-input"
                       inputMode="decimal"
@@ -83,10 +88,10 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
                       onChange={(e) =>
                         onChange(debt.id, 'apr', numVal(e.target.value))
                       }
-                      aria-label={`${debt.name || 'Debt'} APR`}
+                      aria-label={`${debt.name || 'Debt'} interest rate`}
                     />
                   </td>
-                  <td data-label="Min. payment">
+                  <td data-label="Minimum due">
                     <div className="input-prefix">
                       <span>$</span>
                       <input
@@ -108,7 +113,10 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
                       value={debt.dueDay || ''}
                       placeholder="1"
                       onChange={(e) => {
-                        const day = Math.min(31, Math.max(1, Math.round(numVal(e.target.value)) || 1))
+                        const day = Math.min(
+                          31,
+                          Math.max(1, Math.round(numVal(e.target.value)) || 1),
+                        )
                         onChange(debt.id, 'dueDay', day)
                       }}
                       aria-label={`${debt.name || 'Debt'} due day`}
@@ -132,9 +140,13 @@ export function DebtSheet({ debts, onChange, onAdd, onRemove }: DebtSheetProps) 
             <tfoot>
               <tr>
                 <td>Totals</td>
-                <td>{formatMoney(debts.reduce((s, d) => s + (d.balance || 0), 0))}</td>
+                <td>
+                  {formatMoney(debts.reduce((s, d) => s + (d.balance || 0), 0))}
+                </td>
                 <td />
-                <td>{formatMoney(debts.reduce((s, d) => s + (d.minimum || 0), 0))}</td>
+                <td>
+                  {formatMoney(debts.reduce((s, d) => s + (d.minimum || 0), 0))}
+                </td>
                 <td />
                 <td />
               </tr>
