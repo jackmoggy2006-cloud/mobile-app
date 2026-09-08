@@ -1,7 +1,8 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// https://vite.dev/config/
+// Project Pages URL: https://<user>.github.io/mobile-app/
 export default defineConfig({
   plugins: [react()],
+  base: '/mobile-app/',
 })

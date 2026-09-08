@@ -26,3 +26,13 @@ npm run preview
 6. Anything left after that is your monthly buffer
 
 Data stays in your browser (`localStorage`).
+
+## Use on iPhone (Home Screen)
+
+1. Merge this app to `main` and turn on **GitHub Pages** for the repo:
+   - Settings → Pages → Source: **GitHub Actions**
+2. After the deploy workflow finishes, open:
+   - `https://jackmoggy2006-cloud.github.io/mobile-app/`
+3. In Safari: tap **Share** → **Add to Home Screen** → Add.
+
+That installs Cove like an app icon. It still runs as a website (no App Store needed).
