@@ -1,9 +1,14 @@
-name: Deploy Kindlewood to GitHub Pages
+name: Deploy
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Optional note'
+        required: false
+        default: 'Manual redeploy'
 
 permissions:
   contents: read
