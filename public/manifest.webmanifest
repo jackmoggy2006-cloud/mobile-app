@@ -1,13 +1,13 @@
 {
-  "name": "Cove Debt Planner",
-  "short_name": "Cove",
-  "description": "Cover every debt each month and see what money you keep.",
+  "name": "Kindlewood",
+  "short_name": "Kindlewood",
+  "description": "A cozy 2D idle game. Tap the grove and gather resin forever.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#eef5f1",
-  "theme_color": "#0A4A40",
+  "orientation": "any",
+  "background_color": "#102429",
+  "theme_color": "#1a3a3f",
   "icons": [
     {
       "src": "icon-192.png",

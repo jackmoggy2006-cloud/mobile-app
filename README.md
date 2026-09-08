@@ -1,6 +1,6 @@
-# Cove
+# Kindlewood
 
-Simple debt planner. Enter your income, bills, and debts — Cove tells you what to pay each month and how much money you keep.
+A cozy 2D idle game. Tap the grove for resin, buy helpers that gather while you're away, and watch the forest come alive.
 
 ## Run locally
 
@@ -9,30 +9,32 @@ npm install
 npm run dev
 ```
 
-## Build
+## Scripts
 
-```bash
-npm run build
-npm run preview
-```
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server |
+| `npm run build` | Typecheck + production build |
+| `npm run preview` | Serve the production build |
+| `npm run lint` | Oxlint |
+| `npm run test` | Economy unit tests |
 
-## How it works
+## What's in the box
 
-1. Enter take-home monthly income
-2. List living bills (rent, groceries, etc.)
-3. List debts with balance, APR, and minimum payment
-4. Cove pays all minimums first so nothing falls behind
-5. Extra money goes to the highest-interest debt (avalanche) or smallest balance (snowball)
-6. Anything left after that is your monthly buffer
+- Canvas grove that grows with your progress
+- Tap income + passive generators (saplings, fireflies, kilns, groveheart)
+- Upgrades that multiply production and offline gains
+- Autosave to `localStorage`, including offline progress on return
 
-Data stays in your browser (`localStorage`).
+## Play on iPhone (Home Screen)
 
-## Use on iPhone (Home Screen)
+1. Merge to `main` and enable **GitHub Pages** (Settings → Pages → Source: **GitHub Actions**)
+2. Open `https://jackmoggy2006-cloud.github.io/mobile-app/`
+3. Safari → Share → Add to Home Screen
 
-1. Merge this app to `main` and turn on **GitHub Pages** for the repo:
-   - Settings → Pages → Source: **GitHub Actions**
-2. After the deploy workflow finishes, open:
-   - `https://jackmoggy2006-cloud.github.io/mobile-app/`
-3. In Safari: tap **Share** → **Add to Home Screen** → Add.
+## Next ideas
 
-That installs Cove like an app icon. It still runs as a website (no App Store needed).
+- Prestige / rebirth layer
+- More biome visuals as milestones unlock
+- Sound and haptic feedback
+- Achievements and daily goals

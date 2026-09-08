@@ -1,4 +1,4 @@
-name: Deploy Cove to GitHub Pages
+name: Deploy Kindlewood to GitHub Pages
 
 on:
   push:

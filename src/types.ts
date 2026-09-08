@@ -1,50 +1,39 @@
-export type PayStrategy = 'avalanche' | 'snowball'
+export type GeneratorId = 'sapling' | 'firefly' | 'kiln' | 'groveheart'
 
-export interface Debt {
-  id: string
+export type UpgradeId = 'tapStrength' | 'resinVein' | 'emberChorus' | 'deepRoots'
+
+export interface GeneratorDef {
+  id: GeneratorId
   name: string
-  balance: number
-  apr: number
-  minimum: number
-  dueDay: number
+  blurb: string
+  baseCost: number
+  costGrowth: number
+  baseRate: number
 }
 
-export interface Expense {
-  id: string
+export interface UpgradeDef {
+  id: UpgradeId
   name: string
-  amount: number
+  blurb: string
+  baseCost: number
+  costGrowth: number
+  effect: number
 }
 
-export interface PaymentAllocation {
-  debtId: string
-  name: string
-  minimum: number
-  extra: number
-  total: number
-  balance: number
-  apr: number
-  monthsToPayoff: number | null
+export interface GameState {
+  resin: number
+  totalResin: number
+  tapPower: number
+  generators: Record<GeneratorId, number>
+  upgrades: Record<UpgradeId, number>
+  lastTickAt: number
+  createdAt: number
 }
 
-export interface MonthPlan {
-  income: number
-  expensesTotal: number
-  availableForDebt: number
-  minimumsTotal: number
-  extrasTotal: number
-  debtPaymentsTotal: number
-  leftover: number
-  shortfall: number
-  canCoverMinimums: boolean
-  allocations: PaymentAllocation[]
-  strategy: PayStrategy
-  projectedMonths: number | null
-  projectedInterest: number
-}
-
-export interface AppState {
-  income: number
-  strategy: PayStrategy
-  debts: Debt[]
-  expenses: Expense[]
+export interface FloatingText {
+  id: number
+  x: number
+  y: number
+  text: string
+  bornAt: number
 }
