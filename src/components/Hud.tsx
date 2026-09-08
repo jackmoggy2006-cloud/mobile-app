@@ -5,16 +5,31 @@ interface Props {
   rate: number
   tapPower: number
   workers: number
+  sparks: number
+  rebirths: number
+  zones: number
   toast: string | null
   onReset: () => void
 }
 
-export function Hud({ resin, rate, tapPower, workers, toast, onReset }: Props) {
+export function Hud({
+  resin,
+  rate,
+  tapPower,
+  workers,
+  sparks,
+  rebirths,
+  zones,
+  toast,
+  onReset,
+}: Props) {
   return (
     <header className="hud">
       <div className="brand-block">
         <p className="brand">Kindlewood</p>
-        <p className="tagline">Hire workers. Grow the grove. Gather forever.</p>
+        <p className="tagline">
+          Expand areas. Hire workers. Rebirth for Amber Sparks.
+        </p>
       </div>
       <div className="meters">
         <div className="meter resin-meter">
@@ -32,6 +47,18 @@ export function Hud({ resin, rate, tapPower, workers, toast, onReset }: Props) {
         <div className="meter">
           <span className="meter-label">Workers</span>
           <span className="meter-value">{workers}</span>
+        </div>
+        <div className="meter spark-meter">
+          <span className="meter-label">Sparks</span>
+          <span className="meter-value">{sparks}</span>
+        </div>
+        <div className="meter">
+          <span className="meter-label">Rebirths</span>
+          <span className="meter-value">{rebirths}</span>
+        </div>
+        <div className="meter">
+          <span className="meter-label">Areas</span>
+          <span className="meter-value">{zones}/6</span>
         </div>
       </div>
       {toast ? <p className="toast" role="status">{toast}</p> : null}

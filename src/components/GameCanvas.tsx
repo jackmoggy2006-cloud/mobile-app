@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { MAX_VISIBLE_WORKERS, WORKERS } from '../game/catalog'
-import { groveLevel, workerSpeedBonus } from '../game/economy'
-import type { FloatingText, GameState, WorkerId } from '../types'
+import { MAX_VISIBLE_WORKERS, WORKERS, ZONES } from '../game/catalog'
+import { groveLevel, workerSpeedBonus, zoneIndex } from '../game/economy'
+import type { FloatingText, GameState, WorkerId, ZoneId } from '../types'
 
 interface Props {
   state: GameState
@@ -26,6 +26,7 @@ type WorkerPhase = 'toTree' | 'gather' | 'toVat' | 'deposit'
 interface SimWorker {
   key: string
   type: WorkerId
+  zone: ZoneId
   x: number
   y: number
   tx: number
@@ -40,6 +41,14 @@ interface SimWorker {
 interface TreeSpot {
   x: number
   y: number
+  zone: ZoneId
+}
+
+interface ZoneBand {
+  id: ZoneId
+  top: number
+  height: number
+  mid: number
 }
 
 function hashSeed(s: string): number {
@@ -62,6 +71,7 @@ export function GameCanvas({
   const particlesRef = useRef<Particle[]>([])
   const workersRef = useRef<SimWorker[]>([])
   const treesRef = useRef<TreeSpot[]>([])
+  const bandsRef = useRef<ZoneBand[]>([])
   const stateRef = useRef(state)
   const floatsRef = useRef(floats)
   const pulseRef = useRef(pulse)
@@ -86,8 +96,6 @@ export function GameCanvas({
     let height = 0
     let dpr = 1
 
-    const vat = () => ({ x: width * 0.12, y: height * 0.78 })
-
     const resize = () => {
       const parent = canvas.parentElement
       if (!parent) return
@@ -101,39 +109,63 @@ export function GameCanvas({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
+    const buildBands = (zones: ZoneId[]): ZoneBand[] => {
+      const n = Math.max(1, zones.length)
+      const bandH = height / n
+      return zones
+        .slice()
+        .sort((a, b) => zoneIndex(a) - zoneIndex(b))
+        .map((id, i) => ({
+          id,
+          top: i * bandH,
+          height: bandH,
+          mid: i * bandH + bandH * 0.62,
+        }))
+    }
+
+    const vatFor = (zone: ZoneId) => {
+      const band = bandsRef.current.find((b) => b.id === zone) ?? bandsRef.current[0]
+      if (!band) return { x: width * 0.12, y: height * 0.7 }
+      return { x: width * 0.12, y: band.mid + band.height * 0.08 }
+    }
+
     const syncWorkers = (g: GameState) => {
-      const desired: { type: WorkerId; key: string }[] = []
+      const desired: { type: WorkerId; key: string; zone: ZoneId }[] = []
       let slots = MAX_VISIBLE_WORKERS
       for (const def of WORKERS) {
+        if (!g.unlockedZones.includes(def.zone)) continue
         const owned = g.workers[def.id]
         const show = Math.min(owned, def.maxVisible, slots)
         slots -= show
         for (let i = 0; i < show; i += 1) {
-          desired.push({ type: def.id, key: `${def.id}-${i}` })
+          desired.push({ type: def.id, key: `${def.id}-${i}`, zone: def.zone })
         }
         if (slots <= 0) break
       }
 
       const map = new Map(workersRef.current.map((w) => [w.key, w]))
       const next: SimWorker[] = []
-      const v = vat()
       for (const d of desired) {
         const existing = map.get(d.key)
         if (existing) {
+          existing.zone = d.zone
           next.push(existing)
           continue
         }
         const seed = hashSeed(d.key)
-        const trees = treesRef.current
+        const v = vatFor(d.zone)
+        const trees = treesRef.current.filter((t) => t.zone === d.zone)
         const spot = trees[Math.floor(seed * Math.max(1, trees.length))] ?? {
-          x: width * 0.5,
-          y: height * 0.7,
+          x: width * 0.55,
+          y: v.y,
+          zone: d.zone,
         }
         next.push({
           key: d.key,
           type: d.type,
+          zone: d.zone,
           x: v.x + (seed - 0.5) * 40,
-          y: v.y + (seed - 0.5) * 20,
+          y: v.y + (seed - 0.5) * 16,
           tx: spot.x,
           ty: spot.y,
           phase: 'toTree',
@@ -146,10 +178,11 @@ export function GameCanvas({
       workersRef.current = next
     }
 
-    const pickTree = (seed: number): TreeSpot => {
-      const trees = treesRef.current
+    const pickTree = (zone: ZoneId, seed: number): TreeSpot => {
+      const trees = treesRef.current.filter((t) => t.zone === zone)
       if (trees.length === 0) {
-        return { x: width * 0.55, y: height * 0.7 }
+        const v = vatFor(zone)
+        return { x: width * 0.55, y: v.y, zone }
       }
       return trees[Math.floor(seed * trees.length) % trees.length]
     }
@@ -160,6 +193,7 @@ export function GameCanvas({
       scale: number,
       sway: number,
       lit: boolean,
+      tone: string,
     ) => {
       ctx.save()
       ctx.translate(x, y)
@@ -172,7 +206,7 @@ export function GameCanvas({
       ctx.lineTo(28, -8)
       ctx.lineTo(-28, -8)
       ctx.closePath()
-      ctx.fillStyle = lit ? '#1f6b4a' : '#16553a'
+      ctx.fillStyle = lit ? tone : '#16553a'
       ctx.fill()
       ctx.beginPath()
       ctx.moveTo(0, -78)
@@ -193,18 +227,14 @@ export function GameCanvas({
     const drawVat = (x: number, y: number, t: number) => {
       ctx.fillStyle = '#2a211c'
       ctx.beginPath()
-      ctx.ellipse(x, y + 8, 28, 12, 0, 0, Math.PI * 2)
+      ctx.ellipse(x, y + 8, 22, 10, 0, 0, Math.PI * 2)
       ctx.fill()
       ctx.fillStyle = '#3d2f24'
-      ctx.fillRect(x - 22, y - 18, 44, 26)
+      ctx.fillRect(x - 18, y - 14, 36, 22)
       ctx.fillStyle = `rgba(240, 180, 90, ${0.55 + Math.sin(t * 3) * 0.1})`
       ctx.beginPath()
-      ctx.ellipse(x, y - 10, 16, 7, 0, 0, Math.PI * 2)
+      ctx.ellipse(x, y - 8, 13, 6, 0, 0, Math.PI * 2)
       ctx.fill()
-      ctx.fillStyle = '#c8d2c4'
-      ctx.font = '600 11px "Source Sans 3", sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('Vat', x, y + 28)
     }
 
     const drawWorker = (w: SimWorker, t: number) => {
@@ -215,14 +245,13 @@ export function GameCanvas({
       ctx.translate(w.x, w.y + bob)
       ctx.scale(w.facing * scale, scale)
 
-      // shadow
       ctx.fillStyle = 'rgba(0,0,0,0.22)'
       ctx.beginPath()
       ctx.ellipse(0, 10, 9, 3.5, 0, 0, Math.PI * 2)
       ctx.fill()
 
-      // legs
-      const stride = Math.sin(t * 12 + w.bob) * (w.phase.startsWith('to') ? 3 : 0.5)
+      const stride =
+        Math.sin(t * 12 + w.bob) * (w.phase.startsWith('to') ? 3 : 0.5)
       ctx.strokeStyle = def.accent
       ctx.lineWidth = 2.2
       ctx.lineCap = 'round'
@@ -233,7 +262,6 @@ export function GameCanvas({
       ctx.lineTo(3 + stride, 10)
       ctx.stroke()
 
-      // body
       ctx.fillStyle = def.hue
       ctx.beginPath()
       const bw = 14
@@ -249,15 +277,13 @@ export function GameCanvas({
       ctx.closePath()
       ctx.fill()
 
-      // head
       ctx.beginPath()
       ctx.arc(0, -14, 6, 0, Math.PI * 2)
       ctx.fillStyle = '#f3e6c8'
       ctx.fill()
 
-      // hat / accent
       ctx.fillStyle = def.accent
-      if (w.type === 'lanternfolk') {
+      if (w.type === 'lanternfolk' || w.type === 'astralmote') {
         ctx.fillRect(-5, -22, 10, 4)
         ctx.beginPath()
         ctx.arc(8, -6, 3.5, 0, Math.PI * 2)
@@ -265,9 +291,7 @@ export function GameCanvas({
         ctx.fill()
       } else if (w.type === 'cartbearer') {
         ctx.fillRect(8, -2, 12, 8)
-        ctx.strokeStyle = def.accent
-        ctx.strokeRect(8, -2, 12, 8)
-      } else if (w.type === 'grovewarden') {
+      } else if (w.type === 'grovewarden' || w.type === 'emberbearer') {
         ctx.beginPath()
         ctx.moveTo(0, -26)
         ctx.lineTo(7, -16)
@@ -280,7 +304,6 @@ export function GameCanvas({
         ctx.fill()
       }
 
-      // resin haul
       if (w.haul > 0 || w.phase === 'toVat' || w.phase === 'deposit') {
         ctx.beginPath()
         ctx.arc(-9, -2, 3.5, 0, Math.PI * 2)
@@ -293,10 +316,10 @@ export function GameCanvas({
 
     const updateWorkers = (g: GameState, dt: number, t: number) => {
       const speedMul = workerSpeedBonus(g)
-      const v = vat()
       for (const w of workersRef.current) {
         const def = WORKERS.find((d) => d.id === w.type)!
         const speed = def.speed * speedMul
+        const v = vatFor(w.zone)
 
         if (w.phase === 'toTree' || w.phase === 'toVat') {
           const dx = w.tx - w.x
@@ -332,7 +355,7 @@ export function GameCanvas({
             const amount = Math.max(0.1, w.haul * (0.8 + def.baseRate * 0.15))
             depositRef.current(w.x, w.y - 18, amount)
             w.haul = 0
-            const tree = pickTree(hashSeed(w.key + String((t * 10) | 0)))
+            const tree = pickTree(w.zone, hashSeed(w.key + String((t * 10) | 0)))
             w.phase = 'toTree'
             w.tx = tree.x + (hashSeed(w.key + 'x') - 0.5) * 18
             w.ty = tree.y + 6
@@ -349,55 +372,114 @@ export function GameCanvas({
       const level = groveLevel(g)
       const t = now / 1000
 
-      const sky = ctx.createLinearGradient(0, 0, 0, height)
-      sky.addColorStop(0, '#1a3a48')
-      sky.addColorStop(0.45, '#2f5d55')
-      sky.addColorStop(1, '#6d8f4e')
-      ctx.fillStyle = sky
-      ctx.fillRect(0, 0, width, height)
+      const bands = buildBands(g.unlockedZones)
+      bandsRef.current = bands
 
-      const sunX = width * 0.78
-      const sunY = height * 0.22
-      const sun = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 120)
-      sun.addColorStop(0, 'rgba(255, 214, 140, 0.55)')
-      sun.addColorStop(1, 'rgba(255, 214, 140, 0)')
-      ctx.fillStyle = sun
-      ctx.fillRect(sunX - 120, sunY - 120, 240, 240)
-
-      ctx.fillStyle = '#3f5d34'
-      ctx.beginPath()
-      ctx.ellipse(width / 2, height * 0.82, width * 0.55, height * 0.18, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#2f4a2a'
-      ctx.beginPath()
-      ctx.ellipse(width / 2, height * 0.86, width * 0.62, height * 0.14, 0, 0, Math.PI * 2)
-      ctx.fill()
-
-      const treeCount = Math.min(12, 3 + Math.floor(level / 2))
+      ctx.clearRect(0, 0, width, height)
       const trees: TreeSpot[] = []
-      for (let i = 0; i < treeCount; i += 1) {
-        const nx = 0.28 + (i / Math.max(1, treeCount - 1)) * 0.58
-        const x = width * nx + Math.sin(t * 0.4 + i) * 4
-        const y = height * (0.66 + (i % 3) * 0.035)
-        trees.push({ x, y })
-        const scale = 0.7 + (i % 4) * 0.12 + pulseRef.current * 0.04
-        const sway = Math.sin(t * 1.2 + i * 0.7) * 0.04
-        drawTree(x, y, scale, sway, i < g.generators.sapling + g.workers.sproutling + 2)
+
+      for (const band of bands) {
+        const zdef = ZONES.find((z) => z.id === band.id)!
+        const sky = ctx.createLinearGradient(0, band.top, 0, band.top + band.height)
+        sky.addColorStop(0, zdef.skyTop)
+        sky.addColorStop(1, zdef.skyBot)
+        ctx.fillStyle = sky
+        ctx.fillRect(0, band.top, width, band.height)
+
+        // soft sun / star glow
+        const sunX = width * 0.8
+        const sunY = band.top + band.height * 0.22
+        const sun = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 90)
+        sun.addColorStop(
+          0,
+          band.id === 'starfall'
+            ? 'rgba(180, 200, 255, 0.45)'
+            : 'rgba(255, 214, 140, 0.45)',
+        )
+        sun.addColorStop(1, 'rgba(255, 214, 140, 0)')
+        ctx.fillStyle = sun
+        ctx.fillRect(sunX - 90, sunY - 90, 180, 180)
+
+        ctx.fillStyle = zdef.ground
+        ctx.beginPath()
+        ctx.ellipse(
+          width / 2,
+          band.mid,
+          width * 0.55,
+          band.height * 0.22,
+          0,
+          0,
+          Math.PI * 2,
+        )
+        ctx.fill()
+        ctx.fillStyle = zdef.groundDark
+        ctx.beginPath()
+        ctx.ellipse(
+          width / 2,
+          band.mid + band.height * 0.06,
+          width * 0.62,
+          band.height * 0.16,
+          0,
+          0,
+          Math.PI * 2,
+        )
+        ctx.fill()
+
+        ctx.fillStyle = 'rgba(243, 239, 228, 0.7)'
+        ctx.font = '700 13px "Fraunces", Georgia, serif'
+        ctx.textAlign = 'left'
+        ctx.fillText(zdef.name, 12, band.top + 18)
+
+        const treeCount = Math.min(
+          8,
+          2 + Math.floor(level / (4 + bands.length)) + zoneIndex(band.id),
+        )
+        for (let i = 0; i < treeCount; i += 1) {
+          const nx = 0.28 + (i / Math.max(1, treeCount - 1)) * 0.58
+          const x = width * nx + Math.sin(t * 0.4 + i + zoneIndex(band.id)) * 4
+          const y = band.mid - band.height * 0.05 + (i % 3) * 4
+          trees.push({ x, y, zone: band.id })
+          const scale =
+            0.55 + (i % 4) * 0.1 + pulseRef.current * 0.03 + bands.length * 0.02
+          const sway = Math.sin(t * 1.2 + i * 0.7) * 0.04
+          drawTree(x, y, scale, sway, true, '#1f6b4a')
+        }
+
+        drawVat(vatFor(band.id).x, vatFor(band.id).y, t)
+
+        if (band.id === 'brook' || band.id === 'hollow') {
+          ctx.strokeStyle = 'rgba(140, 200, 210, 0.35)'
+          ctx.lineWidth = 3
+          ctx.beginPath()
+          ctx.moveTo(width * 0.2, band.mid + 10)
+          ctx.quadraticCurveTo(
+            width * 0.5,
+            band.mid + 18 + Math.sin(t) * 4,
+            width * 0.85,
+            band.mid + 8,
+          )
+          ctx.stroke()
+        }
       }
       treesRef.current = trees
 
-      drawVat(vat().x, vat().y, t)
-
-      // fireflies
+      // fireflies across map
       const fireflies = Math.min(
-        40,
-        g.generators.firefly * 3 + g.workers.lanternfolk * 2 + Math.floor(level / 2),
+        50,
+        g.generators.firefly * 3 +
+          g.workers.lanternfolk * 2 +
+          g.workers.astralmote * 4 +
+          Math.floor(level / 2),
       )
       for (let i = 0; i < fireflies; i += 1) {
+        const band = bands[i % bands.length]
+        if (!band) continue
         const fx =
           width * (0.2 + ((i * 37) % 60) / 100) + Math.sin(t * 1.7 + i) * 18
         const fy =
-          height * (0.35 + ((i * 19) % 40) / 100) + Math.cos(t * 1.3 + i) * 12
+          band.top +
+          band.height * (0.25 + ((i * 19) % 40) / 100) +
+          Math.cos(t * 1.3 + i) * 10
         const alpha = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(t * 4 + i))
         ctx.beginPath()
         ctx.arc(fx, fy, 2.2, 0, Math.PI * 2)
@@ -405,38 +487,8 @@ export function GameCanvas({
         ctx.fill()
       }
 
-      if (g.generators.kiln > 0 || g.generators.resinpress > 0) {
-        const kx = width * 0.22
-        const ky = height * 0.74
-        ctx.fillStyle = '#2a211c'
-        ctx.fillRect(kx - 18, ky - 22, 36, 28)
-        const glow = ctx.createRadialGradient(kx, ky - 8, 2, kx, ky - 8, 28)
-        glow.addColorStop(0, 'rgba(255, 140, 60, 0.8)')
-        glow.addColorStop(1, 'rgba(255, 140, 60, 0)')
-        ctx.fillStyle = glow
-        ctx.beginPath()
-        ctx.arc(kx, ky - 8, 28, 0, Math.PI * 2)
-        ctx.fill()
-      }
-
-      if (g.generators.groveheart > 0 || g.generators.starroot > 0) {
-        const cx = width * 0.55
-        const cy = height * 0.56
-        const beat = 1 + Math.sin(t * 3) * 0.08 + pulseRef.current * 0.1
-        ctx.beginPath()
-        ctx.ellipse(cx, cy, 26 * beat, 18 * beat, 0, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(255, 170, 80, 0.35)'
-        ctx.fill()
-        ctx.beginPath()
-        ctx.ellipse(cx, cy, 12 * beat, 9 * beat, 0, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(255, 210, 120, 0.9)'
-        ctx.fill()
-      }
-
       syncWorkers(g)
       updateWorkers(g, dt, t)
-
-      // sort workers by y for simple depth
       const sorted = [...workersRef.current].sort((a, b) => a.y - b.y)
       for (const w of sorted) drawWorker(w, t)
 
@@ -463,19 +515,6 @@ export function GameCanvas({
         ctx.fillText(f.text, f.x, f.y - age * 36)
         ctx.globalAlpha = 1
       }
-
-      const vig = ctx.createRadialGradient(
-        width / 2,
-        height / 2,
-        height * 0.2,
-        width / 2,
-        height / 2,
-        height * 0.75,
-      )
-      vig.addColorStop(0, 'rgba(0,0,0,0)')
-      vig.addColorStop(1, 'rgba(8, 20, 18, 0.35)')
-      ctx.fillStyle = vig
-      ctx.fillRect(0, 0, width, height)
 
       raf = requestAnimationFrame(draw)
     }
@@ -513,7 +552,7 @@ export function GameCanvas({
     <canvas
       ref={canvasRef}
       className="grove-canvas"
-      aria-label="Kindlewood grove. Tap to gather resin. Workers collect for you."
+      aria-label="Kindlewood grove map. Tap to gather resin."
       onPointerDown={(e) => {
         e.preventDefault()
         handlePointer(e.clientX, e.clientY)

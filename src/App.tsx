@@ -5,14 +5,18 @@ import { ShopPanel } from './components/ShopPanel'
 import {
   applyPassive,
   buyGenerator,
+  buyPrestige,
   buyUpgrade,
   buyWorker,
   claimMilestone,
   createInitialState,
   effectiveTapPower,
+  performRebirth,
   resinPerSecond,
+  sparksFromRun,
   tapGrove,
   totalWorkers,
+  unlockZone,
 } from './game/economy'
 import { clearSave, loadGame, saveGame } from './game/storage'
 import { formatDuration, formatResin } from './lib/format'
@@ -20,8 +24,10 @@ import type {
   FloatingText,
   GeneratorId,
   MilestoneId,
+  PrestigeId,
   UpgradeId,
   WorkerId,
+  ZoneId,
 } from './types'
 
 export default function App() {
@@ -100,7 +106,9 @@ export default function App() {
     pushFloat(
       x,
       y,
-      result.crit ? `CRIT +${formatResin(result.gained)}` : `+${formatResin(result.gained)}`,
+      result.crit
+        ? `CRIT +${formatResin(result.gained)}`
+        : `+${formatResin(result.gained)}`,
       result.crit ? '#ffe08a' : undefined,
     )
   }
@@ -124,11 +132,42 @@ export default function App() {
     setState((prev) => buyUpgrade(prev, id) ?? prev)
   }
 
+  const onBuyPrestige = (id: PrestigeId) => {
+    setState((prev) => buyPrestige(prev, id) ?? prev)
+  }
+
+  const onUnlockZone = (id: ZoneId) => {
+    setState((prev) => {
+      const next = unlockZone(prev, id)
+      if (!next) return prev
+      setToast(`Area unlocked: ${id}`)
+      return next
+    })
+  }
+
   const onClaimMilestone = (id: MilestoneId) => {
     setState((prev) => {
       const next = claimMilestone(prev, id)
       if (!next) return prev
       setToast(`Goal claimed! +${formatResin(next.resin - prev.resin)} resin`)
+      return next
+    })
+  }
+
+  const onRebirth = () => {
+    const gained = sparksFromRun(stateRef.current.totalResin)
+    if (
+      !window.confirm(
+        `Rebirth the grove for +${gained} Amber Sparks?\n\nResin, workers, buildings, and run upgrades reset. Sparks, permanent upgrades, and unlocked areas stay.`,
+      )
+    ) {
+      return
+    }
+    setState((prev) => {
+      const next = performRebirth(prev)
+      if (!next) return prev
+      setToast(`Rebirth complete! +${gained} Amber Sparks`)
+      setFloats([])
       return next
     })
   }
@@ -153,6 +192,9 @@ export default function App() {
         rate={rate}
         tapPower={tapPower}
         workers={workers}
+        sparks={state.sparks}
+        rebirths={state.rebirths}
+        zones={state.unlockedZones.length}
         toast={toast}
         onReset={onReset}
       />
@@ -166,7 +208,7 @@ export default function App() {
             onWorkerDeposit={onWorkerDeposit}
           />
           <p className="grove-hint">
-            Tap for resin · hire workers to collect for you
+            Tap · hire workers · unlock areas · rebirth for sparks
           </p>
         </div>
         <ShopPanel
@@ -174,7 +216,10 @@ export default function App() {
           onBuyGenerator={onBuyGenerator}
           onBuyWorker={onBuyWorker}
           onBuyUpgrade={onBuyUpgrade}
+          onBuyPrestige={onBuyPrestige}
+          onUnlockZone={onUnlockZone}
           onClaimMilestone={onClaimMilestone}
+          onRebirth={onRebirth}
         />
       </main>
     </div>

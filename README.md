@@ -21,11 +21,12 @@ npm run dev
 
 ## What's in the box
 
-- Canvas grove with **visible workers** walking trees → vat collecting resin
-- 6 hireable worker types, 8 grove buildings, 12 upgrades
-- Milestone goals with lump-sum rewards
-- Tap income (with lucky crits) + passive income + offline progress
-- Autosave to `localStorage`
+- **Rebirth** for Amber Sparks (prestige currency) + permanent upgrades
+- **6 unlockable areas** that grow the on-screen map
+- Visible workers walking trees → vat in each open area
+- 12 buildings, 10 workers, 17 run upgrades, 7 prestige upgrades
+- Milestone goals (including rebirth goals)
+- Offline progress + autosave
 
 ## Play on iPhone (Home Screen)
 
