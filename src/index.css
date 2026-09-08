@@ -186,7 +186,7 @@ button {
 
 .shop {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
   align-content: start;
   max-height: min(72vh, 760px);
   overflow: auto;
@@ -197,6 +197,34 @@ button {
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
   animation: rise 1100ms ease-out both;
+}
+
+.shop-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 0.25rem;
+  background: linear-gradient(180deg, rgba(14, 28, 30, 0.96), rgba(14, 28, 30, 0.88));
+}
+
+.shop-tab {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  padding: 0.45rem 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.shop-tab.is-active {
+  color: #1a2a24;
+  background: var(--amber);
+  border-color: var(--amber);
 }
 
 .shop h2 {
@@ -242,6 +270,11 @@ button {
   background: rgba(240, 180, 90, 0.08);
 }
 
+.shop-item.is-ready:not(:disabled) {
+  border-color: rgba(110, 165, 106, 0.65);
+  background: rgba(110, 165, 106, 0.12);
+}
+
 .shop-item:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -256,6 +289,17 @@ button {
 .shop-item-name {
   font-family: var(--font-display);
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  border: 2px solid;
+  flex: 0 0 auto;
 }
 
 .shop-item-owned {
@@ -274,6 +318,20 @@ button {
   gap: 0.5rem;
   font-size: 0.88rem;
   color: var(--ink-dim);
+}
+
+.goal-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.goal-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--moss), var(--amber));
 }
 
 .cost {

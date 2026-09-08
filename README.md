@@ -21,10 +21,11 @@ npm run dev
 
 ## What's in the box
 
-- Canvas grove that grows with your progress
-- Tap income + passive generators (saplings, fireflies, kilns, groveheart)
-- Upgrades that multiply production and offline gains
-- Autosave to `localStorage`, including offline progress on return
+- Canvas grove with **visible workers** walking trees → vat collecting resin
+- 6 hireable worker types, 8 grove buildings, 12 upgrades
+- Milestone goals with lump-sum rewards
+- Tap income (with lucky crits) + passive income + offline progress
+- Autosave to `localStorage`
 
 ## Play on iPhone (Home Screen)
 

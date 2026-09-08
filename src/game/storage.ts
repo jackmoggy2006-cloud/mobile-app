@@ -1,6 +1,12 @@
 import { SAVE_KEY } from './catalog'
-import { createInitialState, reconcileOffline } from './economy'
-import type { GameState } from '../types'
+import {
+  createInitialState,
+  emptyGenerators,
+  emptyUpgrades,
+  emptyWorkers,
+  reconcileOffline,
+} from './economy'
+import type { GameState, MilestoneId } from '../types'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -10,13 +16,27 @@ function readNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function readCounts<T extends string>(
+  raw: unknown,
+  empty: Record<T, number>,
+): Record<T, number> {
+  const src = isRecord(raw) ? raw : {}
+  const out = { ...empty }
+  for (const key of Object.keys(empty) as T[]) {
+    out[key] = readNumber(src[key], 0)
+  }
+  return out
+}
+
 export function loadGame(): {
   state: GameState
   offlineMs: number
   gained: number
 } {
   try {
-    const raw = localStorage.getItem(SAVE_KEY)
+    const raw =
+      localStorage.getItem(SAVE_KEY) ??
+      localStorage.getItem('kindlewood-save-v1')
     if (!raw) {
       return { state: createInitialState(), offlineMs: 0, gained: 0 }
     }
@@ -25,24 +45,19 @@ export function loadGame(): {
       return { state: createInitialState(), offlineMs: 0, gained: 0 }
     }
     const base = createInitialState()
-    const generators = isRecord(parsed.generators) ? parsed.generators : {}
-    const upgrades = isRecord(parsed.upgrades) ? parsed.upgrades : {}
+    const claimed = Array.isArray(parsed.claimedMilestones)
+      ? (parsed.claimedMilestones.filter(
+          (id): id is MilestoneId => typeof id === 'string',
+        ) as MilestoneId[])
+      : []
     const state: GameState = {
       resin: readNumber(parsed.resin, 0),
       totalResin: readNumber(parsed.totalResin, 0),
       tapPower: readNumber(parsed.tapPower, 1),
-      generators: {
-        sapling: readNumber(generators.sapling, 0),
-        firefly: readNumber(generators.firefly, 0),
-        kiln: readNumber(generators.kiln, 0),
-        groveheart: readNumber(generators.groveheart, 0),
-      },
-      upgrades: {
-        tapStrength: readNumber(upgrades.tapStrength, 0),
-        resinVein: readNumber(upgrades.resinVein, 0),
-        emberChorus: readNumber(upgrades.emberChorus, 0),
-        deepRoots: readNumber(upgrades.deepRoots, 0),
-      },
+      generators: readCounts(parsed.generators, emptyGenerators()),
+      workers: readCounts(parsed.workers, emptyWorkers()),
+      upgrades: readCounts(parsed.upgrades, emptyUpgrades()),
+      claimedMilestones: claimed,
       lastTickAt: readNumber(parsed.lastTickAt, base.lastTickAt),
       createdAt: readNumber(parsed.createdAt, base.createdAt),
     }
@@ -58,4 +73,5 @@ export function saveGame(state: GameState): void {
 
 export function clearSave(): void {
   localStorage.removeItem(SAVE_KEY)
+  localStorage.removeItem('kindlewood-save-v1')
 }

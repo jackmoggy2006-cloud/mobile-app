@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { GameCanvas } from './components/GameCanvas'
 import { Hud } from './components/Hud'
 import { ShopPanel } from './components/ShopPanel'
@@ -6,14 +6,23 @@ import {
   applyPassive,
   buyGenerator,
   buyUpgrade,
+  buyWorker,
+  claimMilestone,
   createInitialState,
   effectiveTapPower,
   resinPerSecond,
   tapGrove,
+  totalWorkers,
 } from './game/economy'
 import { clearSave, loadGame, saveGame } from './game/storage'
 import { formatDuration, formatResin } from './lib/format'
-import type { FloatingText, GeneratorId, UpgradeId } from './types'
+import type {
+  FloatingText,
+  GeneratorId,
+  MilestoneId,
+  UpgradeId,
+  WorkerId,
+} from './types'
 
 export default function App() {
   const [boot] = useState(() => loadGame())
@@ -66,29 +75,62 @@ export default function App() {
     return () => window.clearInterval(id)
   }, [])
 
+  const pushFloat = useCallback(
+    (x: number, y: number, text: string, color?: string) => {
+      floatId.current += 1
+      setFloats((prev) => [
+        ...prev.slice(-28),
+        {
+          id: floatId.current,
+          x,
+          y,
+          text,
+          color,
+          bornAt: performance.now(),
+        },
+      ])
+    },
+    [],
+  )
+
   const onTap = (x: number, y: number) => {
     const result = tapGrove(stateRef.current)
     setState(result.state)
     setPulse(1)
-    floatId.current += 1
-    setFloats((prev) => [
-      ...prev.slice(-20),
-      {
-        id: floatId.current,
-        x,
-        y,
-        text: `+${formatResin(result.gained)}`,
-        bornAt: performance.now(),
-      },
-    ])
+    pushFloat(
+      x,
+      y,
+      result.crit ? `CRIT +${formatResin(result.gained)}` : `+${formatResin(result.gained)}`,
+      result.crit ? '#ffe08a' : undefined,
+    )
   }
+
+  const onWorkerDeposit = useCallback(
+    (x: number, y: number, amount: number) => {
+      pushFloat(x, y, `+${formatResin(amount)}`, '#b8e6a8')
+    },
+    [pushFloat],
+  )
 
   const onBuyGenerator = (id: GeneratorId) => {
     setState((prev) => buyGenerator(prev, id) ?? prev)
   }
 
+  const onBuyWorker = (id: WorkerId) => {
+    setState((prev) => buyWorker(prev, id) ?? prev)
+  }
+
   const onBuyUpgrade = (id: UpgradeId) => {
     setState((prev) => buyUpgrade(prev, id) ?? prev)
+  }
+
+  const onClaimMilestone = (id: MilestoneId) => {
+    setState((prev) => {
+      const next = claimMilestone(prev, id)
+      if (!next) return prev
+      setToast(`Goal claimed! +${formatResin(next.resin - prev.resin)} resin`)
+      return next
+    })
   }
 
   const onReset = () => {
@@ -102,6 +144,7 @@ export default function App() {
 
   const rate = resinPerSecond(state)
   const tapPower = effectiveTapPower(state)
+  const workers = totalWorkers(state)
 
   return (
     <div className="app">
@@ -109,6 +152,7 @@ export default function App() {
         resin={state.resin}
         rate={rate}
         tapPower={tapPower}
+        workers={workers}
         toast={toast}
         onReset={onReset}
       />
@@ -119,13 +163,18 @@ export default function App() {
             floats={floats}
             pulse={pulse}
             onTap={onTap}
+            onWorkerDeposit={onWorkerDeposit}
           />
-          <p className="grove-hint">Tap the grove to gather resin</p>
+          <p className="grove-hint">
+            Tap for resin · hire workers to collect for you
+          </p>
         </div>
         <ShopPanel
           state={state}
           onBuyGenerator={onBuyGenerator}
+          onBuyWorker={onBuyWorker}
           onBuyUpgrade={onBuyUpgrade}
+          onClaimMilestone={onClaimMilestone}
         />
       </main>
     </div>
