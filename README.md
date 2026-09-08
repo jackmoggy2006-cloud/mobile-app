@@ -28,9 +28,26 @@ npm run dev
 
 ## Play on iPhone (Home Screen)
 
-1. Merge to `main` and enable **GitHub Pages** (Settings → Pages → Source: **GitHub Actions**)
-2. Open `https://jackmoggy2006-cloud.github.io/mobile-app/`
-3. Safari → Share → Add to Home Screen
+The game is a website. Publish it with GitHub Pages, then add it to your Home Screen.
+
+### 1. Turn on Pages (one-time)
+
+1. Open **[Settings → Pages](https://github.com/jackmoggy2006-cloud/mobile-app/settings/pages)**
+2. Under **Build and deployment → Source**, choose **GitHub Actions**  
+   (There is no separate “Deploy” button on this page — deploy happens in Actions.)
+
+### 2. Run the deploy workflow
+
+1. Open **[Actions → Deploy](https://github.com/jackmoggy2006-cloud/mobile-app/actions/workflows/deploy-pages.yml)**
+2. Click **Run workflow** (right side) → **Run workflow**
+3. Wait until the run is green
+
+Or push any commit to `main` — that also triggers deploy.
+
+### 3. Open on iPhone
+
+1. In **Safari**, open: https://jackmoggy2006-cloud.github.io/mobile-app/
+2. Tap **Share → Add to Home Screen → Add**
 
 ## Next ideas
 
