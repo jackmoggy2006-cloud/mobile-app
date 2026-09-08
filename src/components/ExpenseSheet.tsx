@@ -23,8 +23,9 @@ export function ExpenseSheet({
     <section className="sheet" aria-labelledby="expenses-heading">
       <div className="sheet-head">
         <div>
+          <p className="step-label">Step 2</p>
           <h2 id="expenses-heading">Monthly bills</h2>
-          <p>Living costs that come out before debt payments.</p>
+          <p>Things you pay every month before debt — rent, groceries, phone, etc.</p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={onAdd}>
           + Add bill
@@ -35,8 +36,8 @@ export function ExpenseSheet({
         <table className="grid-table">
           <thead>
             <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Amount</th>
+              <th scope="col">What is it?</th>
+              <th scope="col">How much?</th>
               <th scope="col" className="col-action">
                 <span className="sr-only">Remove</span>
               </th>
@@ -46,22 +47,22 @@ export function ExpenseSheet({
             {expenses.length === 0 ? (
               <tr>
                 <td colSpan={3} className="empty-row">
-                  Add rent, groceries, and other must-pays.
+                  Tap <strong>+ Add bill</strong> and list your living costs.
                 </td>
               </tr>
             ) : (
               expenses.map((expense) => (
                 <tr key={expense.id}>
-                  <td data-label="Name">
+                  <td data-label="What is it?">
                     <input
                       className="cell-input"
                       value={expense.name}
-                      placeholder="Bill name"
+                      placeholder="e.g. Rent"
                       onChange={(e) => onChange(expense.id, 'name', e.target.value)}
-                      aria-label="Expense name"
+                      aria-label="Bill name"
                     />
                   </td>
-                  <td data-label="Amount">
+                  <td data-label="How much?">
                     <div className="input-prefix">
                       <span>$</span>
                       <input
@@ -72,7 +73,7 @@ export function ExpenseSheet({
                         onChange={(e) =>
                           onChange(expense.id, 'amount', numVal(e.target.value))
                         }
-                        aria-label={`${expense.name || 'Expense'} amount`}
+                        aria-label={`${expense.name || 'Bill'} amount`}
                       />
                     </div>
                   </td>
@@ -81,7 +82,7 @@ export function ExpenseSheet({
                       type="button"
                       className="icon-btn"
                       onClick={() => onRemove(expense.id)}
-                      aria-label={`Remove ${expense.name || 'expense'}`}
+                      aria-label={`Remove ${expense.name || 'bill'}`}
                     >
                       ×
                     </button>

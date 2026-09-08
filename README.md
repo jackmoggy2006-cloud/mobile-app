@@ -1,6 +1,6 @@
 # Cove
 
-Spreadsheet-style debt planner. Enter income, monthly bills, and debts — Cove covers every minimum, aims leftover cash at the best payoff target, and shows what stays in your pocket.
+Simple debt planner. Enter your income, bills, and debts — Cove tells you what to pay each month and how much money you keep.
 
 ## Run locally
 
