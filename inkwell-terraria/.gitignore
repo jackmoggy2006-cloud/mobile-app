@@ -4,3 +4,6 @@ dist/
 *.user
 .vs/
 .DS_Store
+__pycache__/
+*.pyc
+tools/__pycache__/
