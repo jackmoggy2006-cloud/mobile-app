@@ -13,3 +13,9 @@ Same as Terranoita / Stickmin Fate: `InkwellWorld.exe` next to `Terraria.exe`, l
 
 ## Build machine notes
 Cloud Linux agent: no Steam Terraria/Cuphead installed. Game.dll uses runtime reflection (no Terraria reference). In-game verification needs the creator's Windows Steam copies via Melty Play.
+
+## Melty
+- modId: `7d185668-fed0-4f0c-82cf-29286ea223dd`
+- slug: `inkwell-terraria`
+- Studio: https://melty.gg/studio/7d185668-fed0-4f0c-82cf-29286ea223dd
+- Release 0.1.0: draft, one_click yes, awaiting screenshot + Play-to-publish on creator PC
