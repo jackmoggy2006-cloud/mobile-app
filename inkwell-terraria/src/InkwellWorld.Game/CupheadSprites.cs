@@ -179,11 +179,16 @@ namespace InkwellWorld.Game
                 _loaded = Sets.Count > 0;
                 Entry.Log(_loaded
                     ? "CupheadSprites LOADED sets=" + Sets.Count + " textures=" + Textures.Count
-                    : "CupheadSprites EMPTY — PNGs missing or decode failed. " + StatusLine());
+                    : "CupheadSprites EMPTY — delete Melty own/cuphead/cache and Play again (Cuphead need not be open). " + StatusLine());
                 if (_loaded)
                 {
-                    Entry.BannerMessage = "Cuphead art loaded (" + Textures.Count + " frames). F1/F2/F3 to switch.";
-                    Entry.BannerFrames = 60 * 6;
+                    Entry.BannerMessage = "Cuphead art loaded (" + Textures.Count + " frames). F1/F2/F3 — Terraria body is hidden.";
+                    Entry.BannerFrames = 60 * 8;
+                }
+                else
+                {
+                    Entry.BannerMessage = "Cuphead PNGs missing — delete Melty own/cuphead/cache, then Play (do NOT need to launch Cuphead).";
+                    Entry.BannerFrames = 60 * 12;
                 }
             }
             catch (Exception ex)

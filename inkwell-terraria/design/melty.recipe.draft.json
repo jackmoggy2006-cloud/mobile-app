@@ -8,7 +8,7 @@
   "components": [
     {
       "id": "main",
-      "fileName": "inkwell-terraria-0.3.1.zip",
+      "fileName": "inkwell-terraria-0.3.2.zip",
       "label": "Inkwell Terraria",
       "kind": "main",
       "required": true
@@ -32,9 +32,10 @@
       "to": "{managed}/own/cuphead",
       "disc": {
         "files": [
-          "Cuphead_Data/sharedassets8.assets",
-          "Cuphead_Data/sharedassets8.resource",
           "Cuphead_Data/StreamingAssets/AssetBundles/atlas_player",
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_chalice",
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_mugshots",
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_player_replace",
           "UnityPlayer.dll"
         ]
       },
@@ -44,7 +45,7 @@
           "path": "{managed}/prepare/CupPrepare.exe",
           "args": ["--cuphead", "{managed}/own/cuphead", "--out", "{managed}/own/cuphead/cache"]
         },
-        "done": { "file": "{managed}/own/cuphead/cache/extracted.v5.ok" }
+        "done": { "file": "{managed}/own/cuphead/cache/extracted.v6.ok" }
       }
     }
   ],

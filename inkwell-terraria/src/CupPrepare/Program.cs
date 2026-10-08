@@ -83,10 +83,12 @@ static class Program
                 if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.WriteLine(stderr);
                 if (p.ExitCode == 0 && File.Exists(Path.Combine(outDir, "ready.json")))
                 {
+                    // v6 = named cuphead_/mugman_/chalice_ sprites only (+ atlas_chalice)
+                    File.WriteAllText(Path.Combine(outDir, "extracted.v6.ok"), DateTime.UtcNow.ToString("o"));
                     File.WriteAllText(Path.Combine(outDir, "extracted.v5.ok"), DateTime.UtcNow.ToString("o"));
                     File.WriteAllText(Path.Combine(outDir, "extracted.v4.ok"), DateTime.UtcNow.ToString("o"));
                     File.WriteAllText(Path.Combine(outDir, "extracted.ok"), DateTime.UtcNow.ToString("o"));
-                    Console.WriteLine("CupPrepare OK");
+                    Console.WriteLine("CupPrepare OK (v6 named player sprites)");
                     return 0;
                 }
             }
@@ -96,24 +98,14 @@ static class Program
             }
         }
 
-        Console.Error.WriteLine("Sprite extract failed");
-        var characters = new Dictionary<string, object>();
-        foreach (var id in new[] { "cuphead", "mugman", "chalice" })
-            characters[id] = new Dictionary<string, object>
-            {
-                ["portrait"] = "", ["frames"] = new List<string>(),
-                ["animations"] = new Dictionary<string, List<string>>(), ["frameCount"] = 0
-            };
-        File.WriteAllText(Path.Combine(outDir, "ready.json"),
-            JsonSerializer.Serialize(new Dictionary<string, object?>
-            {
-                ["version"] = 2, ["characters"] = characters,
-                ["error"] = "extract failed — see prepare log"
-            }, new JsonSerializerOptions { WriteIndented = true }));
-        return 0;
+        // Do NOT write a fake ready.json — Melty must retry prepare (no extracted.v6.ok).
+        Console.Error.WriteLine("Sprite extract failed — Cuphead does not need to be running; Melty needs atlas_player on disk.");
+        File.WriteAllText(Path.Combine(outDir, "prepare_error.txt"),
+            "extract failed — install Cuphead on Steam (not running). Delete this cache folder and Play again.");
+        return 1;
     }
 
-    /// <summary>Locate Steam Cuphead (app 268910) via libraryfolders.vdf.</summary>
+    /// <summary>Locate Steam Cuphead (app 268910) via libraryfolders.vdf. Game does not need to be running.</summary>
     static string? FindSteamCuphead()
     {
         var roots = new List<string>();
@@ -129,31 +121,69 @@ static class Program
             roots.Add(Path.Combine(home, "Steam"));
             roots.Add(Path.Combine(home, "AppData", "Local", "Steam"));
         }
+        // Steam registry InstallPath (Windows)
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam")
+                ?? Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Valve\Steam")
+                ?? Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Valve\Steam");
+            string? install = key?.GetValue("SteamPath") as string ?? key?.GetValue("InstallPath") as string;
+            if (!string.IsNullOrEmpty(install) && !roots.Contains(install))
+                roots.Insert(0, install.Replace('/', Path.DirectorySeparatorChar));
+        }
+        catch { /* non-Windows or no registry */ }
 
+        string? best = null;
+        long bestScore = -1;
         foreach (var steam in roots)
         {
-            string vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
-            if (!File.Exists(vdf))
+            foreach (var cup in EnumerateCupheadLibraries(steam))
             {
-                // Default library only
-                string def = Path.Combine(steam, "steamapps", "common", "Cuphead");
-                if (Directory.Exists(Path.Combine(def, "Cuphead_Data"))) return def;
-                continue;
+                long score = ScoreCupheadInstall(cup);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = cup;
+                }
             }
+        }
+        if (best != null)
+            Console.WriteLine("Found Steam Cuphead at " + best + " (score=" + bestScore + ")");
+        return best;
+    }
+
+    static IEnumerable<string> EnumerateCupheadLibraries(string steam)
+    {
+        string vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
+        if (File.Exists(vdf))
+        {
             string text = File.ReadAllText(vdf);
             foreach (Match m in Regex.Matches(text, "\"path\"\\s+\"([^\"]+)\""))
             {
                 string lib = m.Groups[1].Value.Replace("\\\\", "\\");
                 string cup = Path.Combine(lib, "steamapps", "common", "Cuphead");
                 if (Directory.Exists(Path.Combine(cup, "Cuphead_Data")))
-                {
-                    Console.WriteLine("Found Steam Cuphead at " + cup);
-                    return cup;
-                }
+                    yield return cup;
             }
-            string fallback = Path.Combine(steam, "steamapps", "common", "Cuphead");
-            if (Directory.Exists(Path.Combine(fallback, "Cuphead_Data"))) return fallback;
         }
-        return null;
+        string fallback = Path.Combine(steam, "steamapps", "common", "Cuphead");
+        if (Directory.Exists(Path.Combine(fallback, "Cuphead_Data")))
+            yield return fallback;
+    }
+
+    /// <summary>Prefer installs that include atlas_player + atlas_chalice.</summary>
+    static long ScoreCupheadInstall(string cup)
+    {
+        string bundles = Path.Combine(cup, "Cuphead_Data", "StreamingAssets", "AssetBundles");
+        long score = 0;
+        foreach (var name in new[] { "atlas_player", "atlas_chalice", "atlas_mugshots" })
+        {
+            string p = Path.Combine(bundles, name);
+            if (File.Exists(p))
+            {
+                try { score += new FileInfo(p).Length; } catch { score += 1; }
+            }
+        }
+        return score;
     }
 }

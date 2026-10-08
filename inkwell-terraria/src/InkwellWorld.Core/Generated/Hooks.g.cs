@@ -25,7 +25,7 @@ namespace InkwellWorld.Generated
             new HookDef { Id = "create_player", Target = "Terraria.Player:SavePlayer(bool, bool)", Patch = "postfix", System = "character_create", Purpose = "Persist which Cuphead kit is tied to this .plr when the player is saved from create.", Stage = "1a" },
             new HookDef { Id = "player_update", Target = "Terraria.Player:Update(int)", Patch = "postfix", System = "player_kit", Purpose = "Run Peashooter, EX, parry, dash/roll and Chalice double-jump for Cuphead kits.", Stage = "1a" },
             new HookDef { Id = "player_hurt", Target = "Terraria.Player:Hurt(PlayerDeathReason, int, int, bool, bool, bool, int, bool)", Patch = "prefix", System = "player_kit", Purpose = "Parry and dash i-frames cancel damage when active.", Stage = "1a" },
-            new HookDef { Id = "draw_player", Target = "Terraria.Main:DrawPlayer(Player, Vector2, float, Vector2, float, float, float)", Patch = "prefix", System = "player_kit", Purpose = "Draw Cuphead atlas frames when the cache is ready; otherwise keep vanilla draw.", Stage = "1a" },
+            new HookDef { Id = "draw_player", Target = "Terraria.Main:DrawPlayer(Player, Vector2, float, Vector2, float, float, float)", Patch = "prefix", System = "player_kit", Purpose = "When Cuphead frames are loaded, draw them and skip Terraria's vanity body; otherwise keep vanilla draw.", Stage = "1a" },
         };
 
         public static HookDef Get(string id) => All.First(x => x.Id == id);

@@ -8,7 +8,9 @@ Play **Terraria** as **Cuphead**, **Mugman**, or **Ms. Chalice** — picked on c
 - Cuphead (Steam)
 - [Melty](https://melty.gg) — press Play (one click)
 
-On first Play, Melty runs **CupPrepare**, which pulls **real Cuphead player Sprites** (idle / run / jump / shoot / dash) from your install into a local cache. Those frames are what you see in-game — nothing from Cuphead is in the Melty download.
+On first Play, Melty runs **CupPrepare**, which pulls **real Cuphead player Sprites** (idle / run / jump / shoot / dash) from your Steam install into a local cache. **Cuphead does not need to be running** — only installed on disk. Those frames replace the Terraria body in-world (F1/F2/F3). Nothing from Cuphead is in the Melty download.
+
+If avatars still look like vanilla Terraria after an update: delete Melty’s `own/cuphead/cache` folder (or the whole `own/cuphead` copy), then Play again so `extracted.v6.ok` is rebuilt from `atlas_player` + `atlas_chalice`.
 
 ## Controls (Cuphead kit)
 

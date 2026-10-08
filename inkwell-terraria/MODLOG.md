@@ -18,4 +18,5 @@ Cloud Linux agent: no Steam Terraria/Cuphead installed. Game.dll uses runtime re
 - modId: `7d185668-fed0-4f0c-82cf-29286ea223dd`
 - slug: `inkwell-terraria`
 - Studio: https://melty.gg/studio/7d185668-fed0-4f0c-82cf-29286ea223dd
-- Release 0.1.0: draft, one_click yes, awaiting screenshot + Play-to-publish on creator PC
+- Release 0.1.0–0.3.1: draft uploads; avatar extract was too loose (junk frames + Terraria body still drawn)
+- Release **0.3.2**: named `cuphead_`/`mugman_`/`chalice_` sprites only; `atlas_chalice` + mugshots; DrawPlayer **prefix** hides Terraria body; `extracted.v6.ok` forces re-prepare. Cuphead must be **installed**, not running.

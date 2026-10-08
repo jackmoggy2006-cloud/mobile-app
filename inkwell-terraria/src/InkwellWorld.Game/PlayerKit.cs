@@ -78,11 +78,11 @@ namespace InkwellWorld.Game
                 break;
             }
 
-            // Patch every DrawPlayer overload — use __args[0] as Player
+            // Replace vanilla Terraria avatar when Cuphead frames load (prefix skips original).
             foreach (var m in _main.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (m.Name != "DrawPlayer") continue;
-                harmony.Patch(m, postfix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPostfix)));
+                harmony.Patch(m, prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPrefix)));
             }
 
             CupheadSprites.Init(terraria);
@@ -452,24 +452,30 @@ namespace InkwellWorld.Game
             return true;
         }
 
-        // Postfix: draw Cuphead ON TOP of vanilla (don't skip vanilla — avoids invisible player if sprite fails)
-        static void DrawPlayerPostfix(object __instance, object[] __args)
+        /// <summary>Return false to skip Terraria's body when real Cuphead art draws.</summary>
+        static bool DrawPlayerPrefix(object __instance, object[] __args)
         {
             try
             {
-                if (__args == null || __args.Length < 1) return;
+                if (__args == null || __args.Length < 1) return true;
                 object player = __args[0];
-                if (player == null || player.GetType().Name != "Player") return;
-                if (!IsLocal(player) && StateFor(player) == null) return;
+                if (player == null || player.GetType().Name != "Player") return true;
                 var rt = StateFor(player);
-                if (rt == null) return;
+                if (rt == null) return true;
                 CupheadSprites.EnsureLoaded();
-                CupheadSprites.TryDrawPlayer(player);
-                DrawKitLabel(player, rt.KitId, rt.Meter);
+                if (CupheadSprites.TryDrawPlayer(player))
+                {
+                    DrawKitLabel(player, rt.KitId, rt.Meter);
+                    return false; // hide Terraria vanity — show Cuphead only
+                }
+                // Art missing: keep vanilla so the player is never invisible
+                DrawKitLabel(player, rt.KitId + " (sprites loading…)", rt.Meter);
+                return true;
             }
             catch (Exception ex)
             {
                 if (_abilityLogCd <= 0) { Entry.Log("DrawPlayer: " + ex.Message); _abilityLogCd = 180; }
+                return true;
             }
         }
 

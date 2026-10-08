@@ -20,7 +20,7 @@
     },
     {
       "id": "cuphead_assets",
-      "description": "Melty ownCopies finds Cuphead; CupPrepare (UnityPy) extracts real player Sprites into a cache with idle/run/jump/shoot/dash clips. The mod loads those PNGs as Texture2D and draws animated avatars (never ships Cuphead files).",
+      "description": "Melty ownCopies finds Cuphead on disk (game need not run); CupPrepare extracts only named cuphead_/mugman_/chalice_ Sprites from atlas_player + atlas_chalice + mugshots. PNGs load as Texture2D; DrawPlayer prefix replaces the Terraria body.",
       "stage": "1a",
       "hooks": ["load_content", "draw_player"],
       "code": "src/InkwellWorld.Core/Cuphead/; src/CupPrepare/; src/InkwellWorld.Game/CupheadSprites.cs",

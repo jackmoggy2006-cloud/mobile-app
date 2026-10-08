@@ -70,7 +70,7 @@
       "target": "Terraria.Main:DrawPlayer(Player, Vector2, float, Vector2, float, float, float)",
       "patch": "prefix",
       "system": "player_kit",
-      "purpose": "Draw Cuphead atlas frames when the cache is ready; otherwise keep vanilla draw.",
+      "purpose": "When Cuphead frames are loaded, draw them and skip Terraria's vanity body; otherwise keep vanilla draw.",
       "stage": "1a",
       "_unverified": {}
     }

@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>CupPrepare</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.3.2</Version>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
+  </ItemGroup>
 </Project>
