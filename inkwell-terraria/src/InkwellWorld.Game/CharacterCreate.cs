@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using HarmonyLib;
 using InkwellWorld.Cuphead;
@@ -7,9 +8,8 @@ using InkwellWorld.Generated;
 namespace InkwellWorld.Game
 {
     /// <summary>
-    /// Terraria 1.4.5 uses FancyUI (menuMode 888) + UICharacterCreation for create.
-    /// DrawMenu alone is easy to miss under that UI — we patch UICharacterCreation.Draw,
-    /// draw a menu banner on select/create, and accept keys 1/2/3.
+    /// Keys 1/2/3 (or clicks) create real saved players named Cuphead / Mugman / Ms. Chalice
+    /// with kits bound — does not rely on Terraria's random vanity roller.
     /// </summary>
     static class CharacterCreate
     {
@@ -19,9 +19,10 @@ namespace InkwellWorld.Game
         static Type _uiCreate;
         static FieldInfo _menuMode;
         static FieldInfo _gameMenu;
-        static FieldInfo _uiPlayer; // UICharacterCreation._player
+        static FieldInfo _uiPlayer;
         static int _lastLoggedMode = int.MinValue;
         static int _logCooldown;
+        static int _createGuard; // debounce
 
         public static void Patch(Harmony harmony, Assembly terraria)
         {
@@ -32,8 +33,6 @@ namespace InkwellWorld.Game
             _gameMenu = AccessTools.Field(_main, "gameMenu");
 
             MethodInfo drawMenu = AccessTools.Method(_main, "DrawMenu");
-            if (drawMenu == null)
-                throw new MissingMethodException("Terraria.Main", "DrawMenu");
             harmony.Patch(drawMenu, postfix: new HarmonyMethod(typeof(CharacterCreate), nameof(DrawMenuPostfix)));
 
             MethodInfo doUpdate = AccessTools.Method(_main, "DoUpdate");
@@ -47,36 +46,29 @@ namespace InkwellWorld.Game
                     ?? AccessTools.Field(_uiCreate, "player");
                 MethodInfo uiDraw = AccessTools.Method(_uiCreate, "Draw");
                 if (uiDraw != null)
-                {
                     harmony.Patch(uiDraw, postfix: new HarmonyMethod(typeof(CharacterCreate), nameof(UiCreateDrawPostfix)));
-                    Entry.Log("CharacterCreate: patched UICharacterCreation.Draw");
-                }
-                else
-                    Entry.Log("CharacterCreate: UICharacterCreation.Draw not found");
+                Entry.Log("CharacterCreate: UICharacterCreation hooked");
             }
-            else
-                Entry.Log("CharacterCreate: UICharacterCreation type missing");
 
             Type uiSelect = terraria.GetType("Terraria.GameContent.UI.States.UICharacterSelect");
             if (uiSelect != null)
             {
                 MethodInfo selDraw = AccessTools.Method(uiSelect, "Draw");
                 if (selDraw != null)
-                {
                     harmony.Patch(selDraw, postfix: new HarmonyMethod(typeof(CharacterCreate), nameof(UiSelectDrawPostfix)));
-                    Entry.Log("CharacterCreate: patched UICharacterSelect.Draw");
-                }
+                Entry.Log("CharacterCreate: UICharacterSelect hooked");
             }
 
             MethodInfo savePlayer = AccessTools.Method(_player, "SavePlayer");
             if (savePlayer != null)
                 harmony.Patch(savePlayer, postfix: new HarmonyMethod(typeof(CharacterCreate), nameof(SavePlayerPostfix)));
 
-            Entry.BannerMessage = Entry.Cache != null && Entry.Cache.Ready
-                ? "Inkwell World: on character create press 1=Cuphead  2=Mugman  3=Ms.Chalice"
-                : (Entry.Cache?.Message ?? "Cuphead required");
-            Entry.BannerFrames = 60 * 20;
-            Entry.Log("CharacterCreate patched");
+            bool sprites = Entry.Cache != null && Entry.Cache.Ready;
+            Entry.BannerMessage = sprites
+                ? "Inkwell World: press 1/2/3 to CREATE Cuphead / Mugman / Ms.Chalice (saved characters)"
+                : (Entry.Cache?.Message ?? "Cuphead sprites not ready — check CupPrepare");
+            Entry.BannerFrames = 60 * 25;
+            Entry.Log("CharacterCreate patched; cacheReady=" + sprites);
         }
 
         static bool InMenus()
@@ -85,42 +77,39 @@ namespace InkwellWorld.Game
             catch { return true; }
         }
 
-        static bool OnCreateOrSelect(int mode)
-        {
-            // MenuID: CharacterSelect=1, CharacterCreation=2, CharacterName=3, FancyUI=888
-            return mode == 1 || mode == 2 || mode == 3 || mode == 888 || mode == 1000;
-        }
+        static bool OnCreateOrSelect(int mode) =>
+            mode == 0 || mode == 1 || mode == 2 || mode == 3 || mode == 888 || mode == 1000;
 
         static void UpdatePostfix()
         {
             try
             {
                 if (!InMenus()) return;
+                if (_createGuard > 0) _createGuard--;
+
                 int mode = (int)_menuMode.GetValue(null);
                 if (_logCooldown-- <= 0)
                 {
-                    _logCooldown = 60;
+                    _logCooldown = 90;
                     if (mode != _lastLoggedMode)
                     {
                         _lastLoggedMode = mode;
-                        Entry.Log("menuMode=" + mode + " (1=select 2=create 888=fancy UI)");
+                        Entry.Log("menuMode=" + mode);
                     }
                 }
 
-                if (!OnCreateOrSelect(mode) && mode != 0) return;
-                if (Entry.Cache == null || !Entry.Cache.Ready) return;
+                if (!OnCreateOrSelect(mode)) return;
 
-                // Number keys work even when our text is under another panel.
-                if (KeyJustPressed("D1") || KeyJustPressed("NumPad1"))
-                    ApplyKit(Characters.Get("cuphead"), null);
-                else if (KeyJustPressed("D2") || KeyJustPressed("NumPad2"))
-                    ApplyKit(Characters.Get("mugman"), null);
-                else if (KeyJustPressed("D3") || KeyJustPressed("NumPad3"))
-                    ApplyKit(Characters.Get("chalice"), null);
+                if (KeyJustPressed("D1") || KeyJustPressed("NumPad1") || KeyJustPressed("F1"))
+                    QuickCreate(Characters.Get("cuphead"));
+                else if (KeyJustPressed("D2") || KeyJustPressed("NumPad2") || KeyJustPressed("F2"))
+                    QuickCreate(Characters.Get("mugman"));
+                else if (KeyJustPressed("D3") || KeyJustPressed("NumPad3") || KeyJustPressed("F3"))
+                    QuickCreate(Characters.Get("chalice"));
             }
             catch (Exception ex)
             {
-                Entry.Log("CreateUpdate: " + ex.Message);
+                Entry.Log("CreateUpdate: " + ex);
             }
         }
 
@@ -135,19 +124,199 @@ namespace InkwellWorld.Game
                 if (keyboard == null || keys == null) return false;
                 object state = AccessTools.Method(keyboard, "GetState").Invoke(null, null);
                 object key = Enum.Parse(keys, keyName);
-                // Prefer Terraria's own edge detection when available
                 bool down = (bool)AccessTools.Method(state.GetType(), "IsKeyDown").Invoke(state, new[] { key });
                 if (!down) return false;
-                // Use Main.keyState / oldKeyState if present for edge
                 object old = Reflect.GetStatic(_main, "oldKeyState");
                 if (old != null)
-                {
-                    bool was = (bool)AccessTools.Method(old.GetType(), "IsKeyDown").Invoke(old, new[] { key });
-                    return !was;
-                }
-                return down; // fallback: held (ApplyKit is idempotent enough)
+                    return !(bool)AccessTools.Method(old.GetType(), "IsKeyDown").Invoke(old, new[] { key });
+                return true;
             }
             catch { return false; }
+        }
+
+        /// <summary>Create (or refresh) a .plr for this Cuphead kit and bind the kit store.</summary>
+        static void QuickCreate(CharacterDef ch)
+        {
+            if (_createGuard > 0) return;
+            _createGuard = 30;
+            if (Entry.Cache == null || !Entry.Cache.Ready)
+            {
+                Entry.BannerMessage = Entry.Cache?.Message ?? "Cuphead not ready";
+                Entry.BannerFrames = 60 * 8;
+                Entry.Log("QuickCreate blocked: cache not ready");
+                return;
+            }
+
+            try
+            {
+                object player = Activator.CreateInstance(_player);
+                // Player() may need Setup or similar — call common init helpers if present
+                MethodInfo reset = AccessTools.Method(_player, "ResetStats")
+                    ?? AccessTools.Method(_player, "SetupDefault");
+                reset?.Invoke(player, null);
+
+                string name = ch.DisplayName; // "Cuphead", "Mugman", "Ms. Chalice"
+                Reflect.SetField(player, "name", name);
+                Reflect.SetField(player, "Male", ch.Id != "chalice");
+                Reflect.SetField(player, "hair", ch.SkinHair);
+                Reflect.SetField(player, "skinVariant", ch.SkinVariant);
+                Reflect.SetField(player, "hairColor", MakeColor(15, 15, 15));
+                Reflect.SetField(player, "eyeColor", MakeColor(20, 20, 20));
+                Reflect.SetField(player, "skinColor", MakeColor(255, 230, 200));
+                Reflect.SetField(player, "shirtColor", MakeColor(ch.Id == "mugman" ? 50 : 200, 40, 40));
+                Reflect.SetField(player, "underShirtColor", MakeColor(220, 50, 50));
+                Reflect.SetField(player, "pantsColor", MakeColor(40, 40, 140));
+                Reflect.SetField(player, "shoeColor", MakeColor(20, 20, 20));
+
+                string path = PlayerFilePath(name);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                // Remove old file so SavePlayer overwrites cleanly
+                if (File.Exists(path))
+                {
+                    try { File.Delete(path); } catch { }
+                    string bak = path + ".bak";
+                    if (File.Exists(bak)) try { File.Delete(bak); } catch { }
+                }
+
+                bool saved = TrySavePlayer(player, path);
+                KitStore.Set(name, ch.Id);
+                Entry.PendingCreateKit = ch.Id;
+
+                // Also apply onto UI create draft if open
+                object draft = FindCreatePlayer();
+                if (draft != null)
+                {
+                    Reflect.SetField(draft, "name", name);
+                    Reflect.SetField(draft, "Male", ch.Id != "chalice");
+                    Reflect.SetField(draft, "hair", ch.SkinHair);
+                    Reflect.SetField(draft, "skinVariant", ch.SkinVariant);
+                }
+
+                TryReloadPlayerList();
+                Entry.BannerMessage = saved
+                    ? ("Created " + name + " — pick them in Single Player. Peashooter + Cuphead art ready.")
+                    : ("Kit " + name + " bound — finish Create and name them exactly \"" + name + "\".");
+                Entry.BannerFrames = 60 * 12;
+                Entry.Log("QuickCreate " + ch.Id + " path=" + path + " saved=" + saved);
+            }
+            catch (Exception ex)
+            {
+                Entry.Log("QuickCreate FATAL " + ex);
+                Entry.BannerMessage = "Could not create " + ch.DisplayName + ": " + ex.GetBaseException().Message;
+                Entry.BannerFrames = 60 * 10;
+            }
+        }
+
+        static string PlayerFilePath(string name)
+        {
+            // Terraria.PlayerPath or Program.SavePath + /Players/
+            string playersDir = null;
+            try
+            {
+                playersDir = (string)Reflect.GetStatic(_main, "PlayerPath");
+            }
+            catch { }
+            if (string.IsNullOrEmpty(playersDir))
+            {
+                string save = null;
+                try
+                {
+                    Type program = _terraria.GetType("Terraria.Program");
+                    save = (string)AccessTools.Field(program, "SavePath")?.GetValue(null);
+                }
+                catch { }
+                if (string.IsNullOrEmpty(save))
+                    save = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "Terraria");
+                playersDir = Path.Combine(save, "Players");
+            }
+            // Sanitize like Terraria
+            foreach (char c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return Path.Combine(playersDir, name + ".plr");
+        }
+
+        static bool TrySavePlayer(object player, string path)
+        {
+            // Overloads vary: SavePlayer(Player, string, bool) / (bool cloud) / static helpers
+            foreach (var m in _player.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic))
+            {
+                if (m.Name != "SavePlayer") continue;
+                var ps = m.GetParameters();
+                try
+                {
+                    if (ps.Length == 2 && ps[0].ParameterType == _player && ps[1].ParameterType == typeof(string))
+                    {
+                        m.Invoke(null, new[] { player, path });
+                        return File.Exists(path);
+                    }
+                    if (ps.Length >= 3 && ps[0].ParameterType == _player && ps[1].ParameterType == typeof(string))
+                    {
+                        object[] args = new object[ps.Length];
+                        args[0] = player;
+                        args[1] = path;
+                        for (int i = 2; i < ps.Length; i++)
+                            args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue
+                                : (ps[i].ParameterType == typeof(bool) ? (object)false : Activator.CreateInstance(ps[i].ParameterType));
+                        m.Invoke(null, args);
+                        return File.Exists(path);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Entry.Log("SavePlayer overload failed: " + ex.GetBaseException().Message);
+                }
+            }
+            // PlayerFileData API (1.4)
+            Type pfd = _terraria.GetType("Terraria.IO.PlayerFileData");
+            if (pfd != null)
+            {
+                try
+                {
+                    object data = Activator.CreateInstance(pfd, path, false);
+                    AccessTools.Property(pfd, "Player")?.SetValue(data, player);
+                    AccessTools.Method(pfd, "Save")?.Invoke(data, null);
+                    AccessTools.Method(pfd, "CreateAndSave", new[] { _player })?.Invoke(null, new[] { player });
+                    MethodInfo createAndSave = null;
+                    foreach (var m in pfd.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                        if (m.Name == "CreateAndSave") createAndSave = m;
+                    createAndSave?.Invoke(null, new[] { player });
+                    if (File.Exists(path)) return true;
+                }
+                catch (Exception ex)
+                {
+                    Entry.Log("PlayerFileData: " + ex.GetBaseException().Message);
+                }
+            }
+            return File.Exists(path);
+        }
+
+        static void TryReloadPlayerList()
+        {
+            try
+            {
+                MethodInfo load = AccessTools.Method(_main, "LoadPlayers")
+                    ?? AccessTools.Method(_player, "LoadPlayers");
+                load?.Invoke(null, null);
+                // Fancy UI character select refresh
+                object menuUi = Reflect.GetStatic(_main, "MenuUI");
+                Type uiSelect = _terraria.GetType("Terraria.GameContent.UI.States.UICharacterSelect");
+                if (menuUi != null && uiSelect != null)
+                {
+                    object state = Activator.CreateInstance(uiSelect);
+                    AccessTools.Method(menuUi.GetType(), "SetState", new[] { state.GetType().BaseType ?? state.GetType() })
+                        ?.Invoke(menuUi, new[] { state });
+                    // Try SetState(UIState)
+                    foreach (var m in menuUi.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        if (m.Name != "SetState" || m.GetParameters().Length != 1) continue;
+                        try { m.Invoke(menuUi, new[] { state }); break; } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Entry.Log("ReloadPlayers: " + ex.GetBaseException().Message);
+            }
         }
 
         static void DrawMenuPostfix(object __instance)
@@ -155,37 +324,22 @@ namespace InkwellWorld.Game
             try
             {
                 int mode = (int)_menuMode.GetValue(null);
-                if (!OnCreateOrSelect(mode) && mode != 0) return;
+                if (!OnCreateOrSelect(mode)) return;
                 DrawPickerOverlay(null, mode == 0);
             }
-            catch (Exception ex)
-            {
-                Entry.Log("DrawMenu: " + ex.Message);
-            }
+            catch (Exception ex) { Entry.Log("DrawMenu: " + ex.Message); }
         }
 
         static void UiCreateDrawPostfix(object __instance, object spriteBatch)
         {
-            try
-            {
-                DrawPickerOverlay(__instance, false);
-            }
-            catch (Exception ex)
-            {
-                Entry.Log("UICreate.Draw: " + ex.Message);
-            }
+            try { DrawPickerOverlay(__instance, false); }
+            catch (Exception ex) { Entry.Log("UICreate.Draw: " + ex.Message); }
         }
 
         static void UiSelectDrawPostfix(object __instance, object spriteBatch)
         {
-            try
-            {
-                DrawPickerOverlay(null, false);
-            }
-            catch (Exception ex)
-            {
-                Entry.Log("UISelect.Draw: " + ex.Message);
-            }
+            try { DrawPickerOverlay(null, false); }
+            catch (Exception ex) { Entry.Log("UISelect.Draw: " + ex.Message); }
         }
 
         static void DrawPickerOverlay(object uiCreateInstance, bool titleOnly)
@@ -193,14 +347,11 @@ namespace InkwellWorld.Game
             object spriteBatch = Reflect.GetStatic(_main, "spriteBatch");
             object font = Reflect.GetStatic(_main, "fontMouseText") ?? Reflect.GetStatic(_main, "fontDeathText");
             if (spriteBatch == null || font == null) return;
-
-            // Ensure SpriteBatch is in a drawable state: Terraria UI often ends it; begin if needed.
             TryBeginSpriteBatch(spriteBatch);
 
-            int sw = (int)(Reflect.GetStatic(_main, "screenWidth") ?? 800);
             int sh = (int)(Reflect.GetStatic(_main, "screenHeight") ?? 600);
             int x0 = 24;
-            int y0 = Math.Max(24, sh - 130);
+            int y0 = Math.Max(24, sh - 150);
 
             if (Entry.Cache == null || !Entry.Cache.Ready)
             {
@@ -210,14 +361,12 @@ namespace InkwellWorld.Game
 
             if (titleOnly)
             {
-                DrawText(spriteBatch, font, "Inkwell World loaded — Single Player → New to pick Cuphead / Mugman / Chalice (or press 1/2/3)", x0, 28, 1f, 0.95f, 0.45f);
+                DrawText(spriteBatch, font, "Inkwell World — Single Player, then press 1/2/3 to create Cuphead / Mugman / Chalice", x0, 28, 1f, 0.95f, 0.45f);
                 return;
             }
 
             CupheadSprites.EnsureLoaded();
-            DrawText(spriteBatch, font, "INKWELL WORLD — click portrait or press 1 / 2 / 3", x0, y0 - 22, 1f, 0.95f, 0.4f);
-            if (!string.IsNullOrEmpty(Entry.PendingCreateKit))
-                DrawText(spriteBatch, font, "Selected: " + Entry.PendingCreateKit + " (finish Create)", x0, y0 - 44, 0.5f, 1f, 0.5f);
+            DrawText(spriteBatch, font, "CREATE CUPHEAD KIT — click or press 1 / 2 / 3  (saves a character)", x0, y0 - 22, 1f, 0.95f, 0.4f);
 
             int mouseX = (int)(Reflect.GetStatic(_main, "mouseX") ?? 0);
             int mouseY = (int)(Reflect.GetStatic(_main, "mouseY") ?? 0);
@@ -227,22 +376,27 @@ namespace InkwellWorld.Game
             foreach (var ch in Characters.All)
             {
                 if (ch.Stage != "1a") continue;
-                int x = x0 + i * 170;
+                int x = x0 + i * 180;
                 int y = y0;
-                bool over = mouseX >= x && mouseX < x + 160 && mouseY >= y && mouseY < y + 72;
-                bool selected = string.Equals(Entry.PendingCreateKit, ch.Id, StringComparison.OrdinalIgnoreCase);
+                bool over = mouseX >= x && mouseX < x + 170 && mouseY >= y - 56 && mouseY < y + 50;
                 object portrait = CupheadSprites.GetPortrait(ch.Id);
                 if (portrait != null)
                     DrawPortrait(spriteBatch, portrait, x, y - 56, 48, 48);
-                float r = selected ? 1f : (over ? 1f : 0.85f);
-                float g = selected ? 0.9f : (over ? 0.95f : 0.75f);
-                float b = selected ? 0.2f : (over ? 0.35f : 0.95f);
+                float r = over ? 1f : 0.85f;
+                float g = over ? 0.95f : 0.75f;
+                float b = over ? 0.3f : 0.95f;
                 DrawText(spriteBatch, font, (i + 1) + ") " + ch.DisplayName, x, y, r, g, b);
-                DrawText(spriteBatch, font, "real Cuphead art", x, y + 20, 0.7f, 0.7f, 0.7f);
+                DrawText(spriteBatch, font, "creates save file", x, y + 20, 0.65f, 0.65f, 0.65f);
                 if (over && click)
-                    ApplyKit(ch, uiCreateInstance);
+                    QuickCreate(ch);
                 i++;
             }
+        }
+
+        static void TryBeginSpriteBatch(object spriteBatch)
+        {
+            try { AccessTools.Method(spriteBatch.GetType(), "Begin", Type.EmptyTypes)?.Invoke(spriteBatch, null); }
+            catch { }
         }
 
         static void DrawPortrait(object spriteBatch, object tex, int x, int y, int w, int h)
@@ -268,65 +422,11 @@ namespace InkwellWorld.Game
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Entry.Log("portrait: " + ex.Message);
-            }
-        }
-
-        static void TryBeginSpriteBatch(object spriteBatch)
-        {
-            try
-            {
-                // If End was already called, Begin again for our overlay. Ignore if already started.
-                var begin = AccessTools.Method(spriteBatch.GetType(), "Begin", Type.EmptyTypes);
-                begin?.Invoke(spriteBatch, null);
-            }
-            catch { /* already begun or wrong overload */ }
-        }
-
-        static void ApplyKit(CharacterDef ch, object uiCreateInstance)
-        {
-            Entry.PendingCreateKit = ch.Id;
-            Entry.BannerMessage = ch.DisplayName + " selected — name them and Create. Peashooter ready on spawn.";
-            Entry.BannerFrames = 60 * 8;
-            Entry.Log("Selected kit " + ch.Id);
-
-            object player = null;
-            if (uiCreateInstance != null && _uiPlayer != null)
-                player = _uiPlayer.GetValue(uiCreateInstance);
-            if (player == null)
-                player = FindCreatePlayer();
-
-            if (player != null)
-            {
-                try
-                {
-                    Reflect.SetField(player, "hair", ch.SkinHair);
-                    Reflect.SetField(player, "skinVariant", ch.SkinVariant);
-                    Reflect.SetField(player, "hairColor", MakeColor(20, 20, 20));
-                    Reflect.SetField(player, "shirtColor", MakeColor(ch.Id == "mugman" ? 40 : 180, 40, 40));
-                    Reflect.SetField(player, "underShirtColor", MakeColor(ch.Id == "chalice" ? 220 : 200, 40, 40));
-                    Reflect.SetField(player, "pantsColor", MakeColor(30, 30, 120));
-                    Reflect.SetField(player, "shoeColor", MakeColor(20, 20, 20));
-                    if (ch.Id == "chalice")
-                        Reflect.SetField(player, "Male", false);
-                    else
-                        Reflect.SetField(player, "Male", true);
-                    string name = (string)Reflect.GetField(player, "name");
-                    if (!string.IsNullOrEmpty(name))
-                        KitStore.Set(name, ch.Id);
-                }
-                catch (Exception ex)
-                {
-                    Entry.Log("ApplyKit vanity: " + ex.Message);
-                }
-            }
+            catch { }
         }
 
         static object FindCreatePlayer()
         {
-            // Walk MenuUI current state for _player
             try
             {
                 object menuUi = Reflect.GetStatic(_main, "MenuUI");
@@ -339,7 +439,7 @@ namespace InkwellWorld.Game
                 }
             }
             catch { }
-            return Reflect.GetStatic(_main, "PendingPlayer");
+            return null;
         }
 
         static object MakeColor(int r, int g, int b)
@@ -354,16 +454,25 @@ namespace InkwellWorld.Game
         {
             try
             {
-                if (string.IsNullOrEmpty(Entry.PendingCreateKit)) return;
                 string name = (string)Reflect.GetField(__instance, "name");
                 if (string.IsNullOrEmpty(name)) return;
-                KitStore.Set(name, Entry.PendingCreateKit);
-                Entry.Log("Saved kit " + Entry.PendingCreateKit + " for player " + name);
+                // Bind by exact display names or pending kit
+                foreach (var ch in Characters.All)
+                {
+                    if (string.Equals(name, ch.DisplayName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        KitStore.Set(name, ch.Id);
+                        Entry.Log("Saved kit " + ch.Id + " for " + name);
+                        return;
+                    }
+                }
+                if (!string.IsNullOrEmpty(Entry.PendingCreateKit))
+                {
+                    KitStore.Set(name, Entry.PendingCreateKit);
+                    Entry.Log("Saved pending kit " + Entry.PendingCreateKit + " for " + name);
+                }
             }
-            catch (Exception ex)
-            {
-                Entry.Log("SavePlayer: " + ex.Message);
-            }
+            catch (Exception ex) { Entry.Log("SavePlayer: " + ex.Message); }
         }
 
         static void DrawText(object spriteBatch, object font, string text, int x, int y, float r, float g, float b)
@@ -379,24 +488,12 @@ namespace InkwellWorld.Game
                     var ps = m.GetParameters();
                     if (ps.Length < 4) continue;
                     object[] args = new object[ps.Length];
-                    args[0] = spriteBatch;
-                    args[1] = text;
-                    args[2] = pos;
-                    args[3] = color;
+                    args[0] = spriteBatch; args[1] = text; args[2] = pos; args[3] = color;
                     for (int i = 4; i < ps.Length; i++)
                         args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : (ps[i].ParameterType == typeof(float) ? 1f : 0);
-                    try { m.Invoke(null, args); return; }
-                    catch { /* try next overload */ }
+                    try { m.Invoke(null, args); return; } catch { }
                 }
             }
-            if (pos == null || color == null) return;
-            try
-            {
-                MethodInfo drawString = AccessTools.Method(spriteBatch.GetType(), "DrawString",
-                    new[] { font.GetType(), typeof(string), pos.GetType(), color.GetType() });
-                drawString?.Invoke(spriteBatch, new[] { font, text, pos, color });
-            }
-            catch { }
         }
 
         static object MakeVector2(float x, float y)

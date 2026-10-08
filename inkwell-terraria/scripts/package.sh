@@ -26,11 +26,18 @@ dotnet publish "$ROOT/src/CupPrepare/CupPrepare.csproj" -c Release -r win-x64 --
 cp -f "$ROOT/src/CupPrepare/prepare_cuphead.py" "$OUT/prepare/"
 cp -f "$ROOT/README.md" "$OUT/"
 
-# Windows embeddable Python + UnityPy for real sprite extract on Play
+# Windows embeddable Python + UnityPy (reuse prior bundle when present)
 chmod +x "$ROOT/scripts/bundle_python.sh"
-"$ROOT/scripts/bundle_python.sh" "$OUT/prepare/python"
+if [ -f "$ROOT/dist/python-bundle/python.exe" ]; then
+  mkdir -p "$OUT/prepare/python"
+  cp -a "$ROOT/dist/python-bundle/." "$OUT/prepare/python/"
+else
+  "$ROOT/scripts/bundle_python.sh" "$ROOT/dist/python-bundle"
+  mkdir -p "$OUT/prepare/python"
+  cp -a "$ROOT/dist/python-bundle/." "$OUT/prepare/python/"
+fi
 
-VER=0.2.0
+VER=0.2.1
 ZIP="$ROOT/dist/inkwell-terraria-${VER}.zip"
 rm -f "$ZIP"
 ( cd "$OUT" && zip -r "$ZIP" . -x '*.pdb' )

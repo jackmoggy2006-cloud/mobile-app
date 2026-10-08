@@ -315,15 +315,59 @@ namespace InkwellWorld.Game
             try
             {
                 object player = drawPlayer ?? __instance;
-                // Main.DrawPlayer(Player, ...) — on instance Main, first arg is Player.
-                if (player != null && player.GetType().Name == "Player" && CupheadSprites.TryDrawPlayer(player))
-                    return false; // skip vanilla body — Cuphead avatar drawn
+                if (player == null || player.GetType().Name != "Player") return true;
+                var rt = StateFor(player);
+                if (rt == null) return true;
+
+                bool drew = CupheadSprites.TryDrawPlayer(player);
+                // Always label the kit so it's obvious even if sprites failed to load.
+                DrawKitLabel(player, rt.KitId);
+                if (drew) return false; // skip vanilla body
             }
             catch (Exception ex)
             {
                 Entry.Log("DrawPlayer: " + ex.Message);
             }
             return true;
+        }
+
+        static void DrawKitLabel(object player, string kitId)
+        {
+            try
+            {
+                object spriteBatch = Reflect.GetStatic(_main, "spriteBatch");
+                object font = Reflect.GetStatic(_main, "fontMouseText");
+                if (spriteBatch == null || font == null) return;
+                object pos = Reflect.GetField(player, "position");
+                object screen = Reflect.GetStatic(_main, "screenPosition");
+                if (pos == null || screen == null) return;
+                float px = (float)pos.GetType().GetField("X").GetValue(pos);
+                float py = (float)pos.GetType().GetField("Y").GetValue(pos);
+                float sx = (float)screen.GetType().GetField("X").GetValue(screen);
+                float sy = (float)screen.GetType().GetField("Y").GetValue(screen);
+                Type utils = _terraria.GetType("Terraria.Utils");
+                Type colorT = _terraria.GetType("Microsoft.Xna.Framework.Color")
+                    ?? Type.GetType("Microsoft.Xna.Framework.Color, Microsoft.Xna.Framework");
+                Type v2 = _terraria.GetType("Microsoft.Xna.Framework.Vector2")
+                    ?? Type.GetType("Microsoft.Xna.Framework.Vector2, Microsoft.Xna.Framework");
+                if (utils == null || colorT == null || v2 == null) return;
+                string label = kitId == "chalice" ? "Ms. Chalice" : (kitId == "mugman" ? "Mugman" : "Cuphead");
+                object color = Activator.CreateInstance(colorT, (byte)255, (byte)220, (byte)80, (byte)255);
+                object vpos = Activator.CreateInstance(v2, px - sx - 10f, py - sy - 24f);
+                foreach (var m in utils.GetMethods(BindingFlags.Static | BindingFlags.Public))
+                {
+                    if (m.Name != "DrawBorderString") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length < 4) continue;
+                    object[] args = new object[ps.Length];
+                    args[0] = spriteBatch; args[1] = label; args[2] = vpos; args[3] = color;
+                    for (int i = 4; i < ps.Length; i++)
+                        args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : (ps[i].ParameterType == typeof(float) ? 0.9f : 0);
+                    m.Invoke(null, args);
+                    break;
+                }
+            }
+            catch { }
         }
     }
 }

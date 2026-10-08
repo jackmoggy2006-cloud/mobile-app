@@ -81,6 +81,9 @@ static class Program
                 if (p.ExitCode == 0 && File.Exists(Path.Combine(outDir, "ready.json")))
                 {
                     // Marker Melty watches so an old stub ready.json does not skip re-extract.
+                    File.WriteAllText(Path.Combine(outDir, "extracted.v3.ok"),
+                        DateTime.UtcNow.ToString("o") + "\n");
+                    // Keep legacy marker too
                     File.WriteAllText(Path.Combine(outDir, "extracted.ok"),
                         DateTime.UtcNow.ToString("o") + "\n");
                     Console.WriteLine("CupPrepare OK");

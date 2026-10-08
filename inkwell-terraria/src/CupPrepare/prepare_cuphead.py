@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
-"""Extract real Cuphead player Sprites into a Melty cache with animation clips.
+"""Extract real Cuphead player Sprites into Melty cache with animation clips.
 
-Usage:
-  python prepare_cuphead.py --cuphead <Cuphead folder or Melty own/cuphead> --out <cache dir>
-
-Writes:
-  ready.json
-  <char>/portrait.png
-  <char>/<anim>/000.png ...
+atlas_player is the player-only bundle: classify by path/name; leftovers → cuphead.
 """
 from __future__ import annotations
 
@@ -18,71 +12,59 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-# Character id -> name tokens that appear in Cuphead sprite asset names
-CHAR_TOKENS = {
-    "cuphead": [r"\bcuphead\b", r"\bcup_head\b", r"(^|_)ch_(?!alice)"],
-    "mugman": [r"\bmugman\b", r"\bmm\b", r"(^|_)mm_"],
-    "chalice": [r"\bchalice\b", r"\bmschalice\b", r"\bms_chalice\b", r"\bchalice_"],
-}
-
-# Animation bucket <- substrings in sprite name (first match wins)
 ANIM_RULES = [
     ("dash", ["dash", "dodge", "roll", "slide"]),
     ("parry", ["parry", "slap"]),
-    ("ex", ["ex_", "_ex", "super", "energy_beam"]),
-    ("shoot", ["shoot", "fire", "attack", "peashooter", "weapon"]),
+    ("ex", ["ex_", "_ex", "super", "energy"]),
+    ("shoot", ["shoot", "fire", "attack", "peashooter", "weapon", "aim"]),
     ("duck", ["duck", "crouch"]),
-    ("jump", ["jump", "air", "fall"]),
-    ("run", ["run", "walk", "jog"]),
+    ("jump", ["jump", "air", "fall", "flop"]),
+    ("run", ["run", "walk", "jog", "sprint"]),
     ("hit", ["hit", "hurt", "damage"]),
-    ("idle", ["idle", "stand", "neutral", "breath"]),
+    ("idle", ["idle", "stand", "neutral", "breath", "intro"]),
 ]
 
 
 def find_sources(cuphead: Path) -> list[Path]:
     found: list[Path] = []
-    candidates = [
+    for c in [
         cuphead / "Cuphead_Data" / "StreamingAssets" / "AssetBundles" / "atlas_player",
         cuphead / "Cuphead_Data" / "sharedassets8.assets",
         cuphead / "raw" / "atlas_player",
         cuphead / "atlas_player",
         cuphead / "sharedassets8.assets",
-    ]
-    for c in candidates:
+    ]:
         if c.exists():
             found.append(c)
-    # Melty ownCopies may flatten under cuphead/
-    for p in cuphead.rglob("*"):
-        if not p.is_file():
-            continue
-        name = p.name.lower()
-        if name == "atlas_player" or name.startswith("atlas_player"):
-            if p not in found:
-                found.append(p)
-        if name.startswith("sharedassets") and name.endswith(".assets"):
-            if p not in found:
-                found.append(p)
+    if cuphead.is_dir():
+        for p in cuphead.rglob("*"):
+            if not p.is_file():
+                continue
+            n = p.name.lower()
+            if n == "atlas_player" or n.startswith("atlas_player") or (
+                n.startswith("sharedassets") and n.endswith(".assets")
+            ):
+                if p not in found:
+                    found.append(p)
     return found
 
 
-def classify_char(name: str) -> str | None:
-    n = name.lower().replace("-", "_")
-    # Prefer more specific first
-    for cid, patterns in (
-        ("chalice", CHAR_TOKENS["chalice"]),
-        ("mugman", CHAR_TOKENS["mugman"]),
-        ("cuphead", CHAR_TOKENS["cuphead"]),
-    ):
-        for pat in patterns:
-            if re.search(pat, n, re.I):
-                return cid
+def classify_char(name: str, path: str = "") -> str | None:
+    blob = (path + " " + name).lower().replace("-", "_").replace("\\", "/")
+    # Order: most specific first
+    if any(t in blob for t in ("chalice", "mschalice", "ms_chalice", "chs_", "/chalice", "dlc_chalice")):
+        return "chalice"
+    if any(t in blob for t in ("mugman", "/mm/", "_mm_", "mm_", "player_mm", "mug_man")):
+        return "mugman"
+    if any(t in blob for t in ("cuphead", "cup_head", "player_cuphead", "/ch/", "player/cup")):
+        return "cuphead"
     return None
 
 
-def classify_anim(name: str) -> str:
-    n = name.lower()
+def classify_anim(name: str, path: str = "") -> str:
+    blob = (path + " " + name).lower()
     for anim, keys in ANIM_RULES:
-        if any(k in n for k in keys):
+        if any(k in blob for k in keys):
             return anim
     return "idle"
 
@@ -92,15 +74,11 @@ def natural_key(s: str):
 
 
 def extract(sources: list[Path], out: Path) -> dict:
-    try:
-        import UnityPy
-    except ImportError:
-        print("UnityPy missing", file=sys.stderr)
-        raise
+    import UnityPy
 
-    # char -> anim -> list of (sort_name, PIL image)
     buckets: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    seen_names: set[str] = set()
+    dump_lines: list[str] = []
+    seen: set[str] = set()
 
     for src in sources:
         print("Loading", src)
@@ -109,35 +87,59 @@ def extract(sources: list[Path], out: Path) -> dict:
         except Exception as ex:
             print("Skip", src, ex, file=sys.stderr)
             continue
-        for obj in env.objects:
+
+        # Prefer container paths (often include cuphead/mugman folders)
+        containers = []
+        try:
+            containers = list(getattr(env, "container", {}).items())
+        except Exception:
+            containers = []
+
+        def handle(obj, path_hint: str, name_hint: str = ""):
             if obj.type.name not in ("Sprite", "Texture2D"):
-                continue
+                return
             try:
                 data = obj.read()
             except Exception:
-                continue
-            name = getattr(data, "name", None) or getattr(data, "m_Name", "") or ""
-            if not name or name in seen_names:
-                continue
-            cid = classify_char(name)
-            if not cid:
-                continue
+                return
+            name = name_hint or getattr(data, "name", None) or getattr(data, "m_Name", "") or ""
+            key = f"{path_hint}|{name}|{obj.type.name}|{getattr(obj, 'path_id', '')}"
+            if not name or key in seen:
+                return
+            if obj.type.name == "Texture2D":
+                # Skip giant atlas sheets; prefer Sprite crops
+                try:
+                    w = int(getattr(data, "m_Width", 0) or 0)
+                    if w > 1024 or "atlas" in name.lower():
+                        dump_lines.append(f"SKIP_TEX\t{path_hint}\t{name}\t{w}")
+                        return
+                except Exception:
+                    pass
             try:
                 img = data.image
             except Exception:
-                continue
+                return
             if img is None:
-                continue
-            # Prefer Sprite crops over full Texture2D sheets when both exist
-            if obj.type.name == "Texture2D" and any(
-                classify_char(n) == cid for n in seen_names
-            ):
-                # still allow unique texture names that look like frames
-                if "atlas" in name.lower() or img.width > 512:
-                    continue
-            seen_names.add(name)
-            anim = classify_anim(name)
+                return
+            seen.add(key)
+            cid = classify_char(name, path_hint)
+            # atlas_player is player-only: unclassified → cuphead
+            if cid is None and "atlas_player" in str(src).lower():
+                cid = "cuphead"
+            if cid is None:
+                dump_lines.append(f"UNCLASS\t{path_hint}\t{name}")
+                return
+            anim = classify_anim(name, path_hint)
+            dump_lines.append(f"OK\t{cid}\t{anim}\t{path_hint}\t{name}")
             buckets[cid][anim].append((name, img))
+
+        for path, obj in containers:
+            handle(obj, str(path))
+        for obj in env.objects:
+            handle(obj, "")
+
+    (out / "names_dump.txt").write_text("\n".join(dump_lines)[:2_000_000], encoding="utf-8")
+    print("Wrote names_dump.txt lines=", len(dump_lines))
 
     characters = {}
     for cid in ("cuphead", "mugman", "chalice"):
@@ -146,14 +148,11 @@ def extract(sources: list[Path], out: Path) -> dict:
         char_dir.mkdir(parents=True, exist_ok=True)
         anim_out = {}
         all_frames = []
-        portrait_rel = ""
         for anim, frames in anims.items():
             frames.sort(key=lambda t: natural_key(t[0]))
-            adir = char_dir / anim
-            adir.mkdir(parents=True, exist_ok=True)
+            (char_dir / anim).mkdir(parents=True, exist_ok=True)
             rels = []
             for i, (name, img) in enumerate(frames):
-                # Normalize: RGBA, reasonable size kept as-is (game scales)
                 if img.mode != "RGBA":
                     img = img.convert("RGBA")
                 rel = f"{cid}/{anim}/{i:03d}.png"
@@ -162,15 +161,13 @@ def extract(sources: list[Path], out: Path) -> dict:
                 all_frames.append(rel)
             if rels:
                 anim_out[anim] = rels
-        # Portrait: prefer idle mid frame, else first of any
+        portrait_rel = ""
         if "idle" in anim_out and anim_out["idle"]:
             portrait_rel = anim_out["idle"][len(anim_out["idle"]) // 2]
         elif all_frames:
             portrait_rel = all_frames[0]
         if portrait_rel:
-            # copy as portrait.png for stable path
             from shutil import copyfile
-
             copyfile(out / portrait_rel, char_dir / "portrait.png")
             portrait_rel = f"{cid}/portrait.png"
         characters[cid] = {
@@ -193,25 +190,24 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     sources = find_sources(cuphead)
+    print("Sources:", [str(s) for s in sources])
     if not sources:
         print("No Cuphead atlas/sharedassets under " + str(cuphead), file=sys.stderr)
+        (out / "prepare_error.txt").write_text("no sources under " + str(cuphead), encoding="utf-8")
         return 2
 
     try:
         characters = extract(sources, out)
     except Exception as ex:
         print("Extract failed:", ex, file=sys.stderr)
+        (out / "prepare_error.txt").write_text(repr(ex), encoding="utf-8")
         return 3
 
     if not any(c.get("frameCount", 0) > 0 for c in characters.values()):
-        print("No player sprites classified — check atlas contents", file=sys.stderr)
+        print("No sprites extracted — see names_dump.txt", file=sys.stderr)
         return 4
 
-    ready = {
-        "version": 2,
-        "characters": characters,
-        "sources": [str(s) for s in sources],
-    }
+    ready = {"version": 2, "characters": characters, "sources": [str(s) for s in sources]}
     (out / "ready.json").write_text(json.dumps(ready, indent=2), encoding="utf-8")
     print("Wrote", out / "ready.json")
     return 0
