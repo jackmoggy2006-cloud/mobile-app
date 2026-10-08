@@ -83,8 +83,8 @@ static class Program
                 if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.WriteLine(stderr);
                 if (p.ExitCode == 0 && File.Exists(Path.Combine(outDir, "ready.json")))
                 {
+                    File.WriteAllText(Path.Combine(outDir, "extracted.v5.ok"), DateTime.UtcNow.ToString("o"));
                     File.WriteAllText(Path.Combine(outDir, "extracted.v4.ok"), DateTime.UtcNow.ToString("o"));
-                    File.WriteAllText(Path.Combine(outDir, "extracted.v3.ok"), DateTime.UtcNow.ToString("o"));
                     File.WriteAllText(Path.Combine(outDir, "extracted.ok"), DateTime.UtcNow.ToString("o"));
                     Console.WriteLine("CupPrepare OK");
                     return 0;

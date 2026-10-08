@@ -19,8 +19,11 @@ cp -f "$LAUNCH/InkwellWorld.exe" "$OUT/"
 cp -f "$LAUNCH/InkwellWorld.exe.config" "$OUT/" 2>/dev/null || true
 cp -f "$LAUNCH/"*.dll "$OUT/" 2>/dev/null || true
 cp -f "$GAME/InkwellWorld.Game.dll" "$OUT/"
-cp -f "$GAME/0Harmony.dll" "$OUT/" 2>/dev/null || cp -f "$GAME/Harmony.dll" "$OUT/" 2>/dev/null || true
+# Game deps (Harmony, ImageSharp, etc.)
+cp -f "$GAME/"*.dll "$OUT/" 2>/dev/null || true
 cp -f "$ROOT/src/InkwellWorld.Core/bin/Release/netstandard2.0/InkwellWorld.Core.dll" "$OUT/"
+# Launcher deps already copied; avoid overwriting InkwellWorld.exe
+ls "$OUT"/*.dll | wc -l
 
 dotnet publish "$ROOT/src/CupPrepare/CupPrepare.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o "$OUT/prepare"
 cp -f "$ROOT/src/CupPrepare/prepare_cuphead.py" "$OUT/prepare/"
@@ -37,7 +40,7 @@ else
   cp -a "$ROOT/dist/python-bundle/." "$OUT/prepare/python/"
 fi
 
-VER=0.3.0
+VER=0.3.1
 ZIP="$ROOT/dist/inkwell-terraria-${VER}.zip"
 rm -f "$ZIP"
 ( cd "$OUT" && zip -r "$ZIP" . -x '*.pdb' )

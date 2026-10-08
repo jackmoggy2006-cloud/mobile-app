@@ -4,6 +4,8 @@ using System.IO;
 using System.Reflection;
 using HarmonyLib;
 using InkwellWorld.Cuphead;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace InkwellWorld.Game
 {
@@ -15,15 +17,17 @@ namespace InkwellWorld.Game
         static Type _texture2D;
         static Type _color;
         static Type _vector2;
-        static Type _rectangle;
         static Type _spriteEffects;
         static object _white;
         static object _fxNone, _fxFlip;
         static MethodInfo _fromStream;
+        static MethodInfo _setData;
+        static ConstructorInfo _texCtor;
         static readonly Dictionary<string, object> Textures = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         static readonly Dictionary<string, AnimSet> Sets = new Dictionary<string, AnimSet>(StringComparer.OrdinalIgnoreCase);
         static bool _loaded;
         static bool _failed;
+        static int _retryLog;
 
         sealed class AnimSet
         {
@@ -46,6 +50,22 @@ namespace InkwellWorld.Game
             return !string.IsNullOrEmpty(kitId) && Sets.ContainsKey(kitId) && Sets[kitId].Anims.Count > 0;
         }
 
+        public static string StatusLine()
+        {
+            if (Entry.Cache == null || !Entry.Cache.Ready)
+                return "Cuphead cache NOT ready: " + (Entry.Cache?.Message ?? "?");
+            int pngs = 0;
+            try
+            {
+                if (Directory.Exists(Entry.Cache.Root))
+                    pngs = Directory.GetFiles(Entry.Cache.Root, "*.png", SearchOption.AllDirectories).Length;
+            }
+            catch { }
+            EnsureLoaded();
+            return "cache=" + Entry.Cache.Root + " pngs=" + pngs + " loadedSets=" + Sets.Count
+                + " cuphead=" + HasKit("cuphead") + " mugman=" + HasKit("mugman") + " chalice=" + HasKit("chalice");
+        }
+
         static Type FindType(string fullName)
         {
             var t = Type.GetType(fullName)
@@ -60,11 +80,7 @@ namespace InkwellWorld.Game
             }
             foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
             {
-                try
-                {
-                    t = a.GetType(fullName);
-                    if (t != null) return t;
-                }
+                try { t = a.GetType(fullName); if (t != null) return t; }
                 catch { }
             }
             return null;
@@ -77,7 +93,6 @@ namespace InkwellWorld.Game
             _texture2D = FindType("Microsoft.Xna.Framework.Graphics.Texture2D");
             _color = FindType("Microsoft.Xna.Framework.Color");
             _vector2 = FindType("Microsoft.Xna.Framework.Vector2");
-            _rectangle = FindType("Microsoft.Xna.Framework.Rectangle");
             _spriteEffects = FindType("Microsoft.Xna.Framework.Graphics.SpriteEffects");
             Entry.Log("CupheadSprites types tex=" + (_texture2D != null) + " color=" + (_color != null));
             if (_color != null)
@@ -88,61 +103,99 @@ namespace InkwellWorld.Game
                 _fxNone = Enum.Parse(_spriteEffects, "None");
                 _fxFlip = Enum.Parse(_spriteEffects, "FlipHorizontally");
             }
+            if (_texture2D != null)
+            {
+                foreach (var m in _texture2D.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                    if (m.Name == "FromStream" && m.GetParameters().Length >= 2) { _fromStream = m; break; }
+                foreach (var c in _texture2D.GetConstructors())
+                {
+                    var ps = c.GetParameters();
+                    if (ps.Length == 3 && ps[1].ParameterType == typeof(int) && ps[2].ParameterType == typeof(int))
+                    { _texCtor = c; break; }
+                }
+                foreach (var m in _texture2D.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (m.Name != "SetData" || !m.IsGenericMethodDefinition) continue;
+                    try
+                    {
+                        _setData = m.MakeGenericMethod(_color);
+                        break;
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        static object GetGraphicsDevice()
+        {
+            // Main.graphics.GraphicsDevice
+            object graphics = Reflect.GetStatic(_main, "graphics");
+            if (graphics != null)
+            {
+                var gd = AccessTools.Property(graphics.GetType(), "GraphicsDevice")?.GetValue(graphics)
+                    ?? Reflect.GetField(graphics, "GraphicsDevice");
+                if (gd != null) return gd;
+            }
+            // Main.instance.GraphicsDevice (XNA Game)
+            object instance = Reflect.GetStatic(_main, "instance");
+            if (instance != null)
+            {
+                var gd = AccessTools.Property(instance.GetType(), "GraphicsDevice")?.GetValue(instance)
+                    ?? Reflect.GetField(instance, "GraphicsDevice");
+                if (gd != null) return gd;
+            }
+            return null;
         }
 
         public static void EnsureLoaded()
         {
-            if (_loaded || _failed) return;
+            if (_loaded) return;
             if (Entry.Cache == null || !Entry.Cache.Ready)
             {
-                _failed = true;
+                if (_retryLog-- <= 0) { Entry.Log("CupheadSprites: " + StatusLine()); _retryLog = 180; }
                 return;
             }
             try
             {
-                object gd = null;
-                object graphics = Reflect.GetStatic(_main, "graphics");
-                if (graphics != null)
-                    gd = AccessTools.Property(graphics.GetType(), "GraphicsDevice")?.GetValue(graphics)
-                        ?? Reflect.GetField(graphics, "GraphicsDevice");
+                object gd = GetGraphicsDevice();
                 if (gd == null)
                 {
-                    Entry.Log("CupheadSprites: GraphicsDevice not ready yet");
+                    if (_retryLog-- <= 0) { Entry.Log("CupheadSprites: GraphicsDevice not ready; " + StatusLine()); _retryLog = 120; }
                     return;
                 }
-                if (_texture2D != null)
+
+                // Report disk state once
+                if (_retryLog <= 0)
                 {
-                    foreach (var m in _texture2D.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                    {
-                        if (m.Name == "FromStream" && m.GetParameters().Length >= 2)
-                        {
-                            _fromStream = m;
-                            break;
-                        }
-                    }
+                    Entry.Log("CupheadSprites loading… " + StatusLine());
+                    _retryLog = 9999;
                 }
+
+                Sets.Clear();
+                Textures.Clear();
                 foreach (var kv in Entry.Cache.Characters)
                     LoadCharacter(kv.Key, kv.Value, gd);
+
                 _loaded = Sets.Count > 0;
-                if (!_loaded)
+                Entry.Log(_loaded
+                    ? "CupheadSprites LOADED sets=" + Sets.Count + " textures=" + Textures.Count
+                    : "CupheadSprites EMPTY — PNGs missing or decode failed. " + StatusLine());
+                if (_loaded)
                 {
-                    Entry.Log("CupheadSprites: no anim sets from cache (frame PNGs missing?)");
-                    // allow retry next frame if GraphicsDevice was early
+                    Entry.BannerMessage = "Cuphead art loaded (" + Textures.Count + " frames). F1/F2/F3 to switch.";
+                    Entry.BannerFrames = 60 * 6;
                 }
-                else
-                    Entry.Log("CupheadSprites loaded for " + Sets.Count + " characters");
             }
             catch (Exception ex)
             {
                 Entry.Log("CupheadSprites load failed: " + ex);
-                // don't permanently fail — retry
             }
         }
 
         static void LoadCharacter(string id, CupheadCache.CharacterArt art, object gd)
         {
             var set = new AnimSet();
-            if (art.Animations != null && art.Animations.Count > 0)
+            if (art.Animations != null)
             {
                 foreach (var anim in art.Animations)
                 {
@@ -169,18 +222,62 @@ namespace InkwellWorld.Game
                 set.Portrait = LoadTex(art.PortraitPath, gd);
             if (set.Anims.Count > 0 || set.Portrait != null)
                 Sets[id] = set;
+            Entry.Log("char " + id + " anims=" + set.Anims.Count + " framesTotal=" + art.FrameCount);
         }
 
         static object LoadTex(string path, object gd)
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
             if (Textures.TryGetValue(path, out var cached)) return cached;
-            if (_fromStream == null) return null;
-            using (var fs = File.OpenRead(path))
+
+            // 1) ImageSharp → Texture2D.SetData (most reliable on FNA/XNA)
+            object tex = LoadViaImageSharp(path, gd);
+            if (tex == null && _fromStream != null)
             {
-                object tex = _fromStream.Invoke(null, new object[] { gd, fs });
-                Textures[path] = tex;
-                return tex;
+                try
+                {
+                    using (var fs = File.OpenRead(path))
+                        tex = _fromStream.Invoke(null, new object[] { gd, fs });
+                }
+                catch (Exception ex)
+                {
+                    Entry.Log("FromStream fail " + Path.GetFileName(path) + ": " + ex.GetBaseException().Message);
+                }
+            }
+            if (tex != null) Textures[path] = tex;
+            return tex;
+        }
+
+        static object LoadViaImageSharp(string path, object gd)
+        {
+            if (_texCtor == null || _setData == null || _color == null) return null;
+            try
+            {
+                using (var img = Image.Load<Rgba32>(path))
+                {
+                    object tex = _texCtor.Invoke(new object[] { gd, img.Width, img.Height });
+                    Array colors = Array.CreateInstance(_color, img.Width * img.Height);
+                    int i = 0;
+                    img.ProcessPixelRows(accessor =>
+                    {
+                        for (int y = 0; y < accessor.Height; y++)
+                        {
+                            var row = accessor.GetRowSpan(y);
+                            for (int x = 0; x < row.Length; x++)
+                            {
+                                var p = row[x];
+                                colors.SetValue(Activator.CreateInstance(_color, p.R, p.G, p.B, p.A), i++);
+                            }
+                        }
+                    });
+                    _setData.Invoke(tex, new object[] { colors });
+                    return tex;
+                }
+            }
+            catch (Exception ex)
+            {
+                Entry.Log("ImageSharp fail " + Path.GetFileName(path) + ": " + ex.GetBaseException().Message);
+                return null;
             }
         }
 
@@ -191,8 +288,7 @@ namespace InkwellWorld.Game
             if (!Sets.TryGetValue(kitId, out set)) return null;
             if (set.Portrait != null) return set.Portrait;
             List<object> idle;
-            if (set.Anims.TryGetValue("idle", out idle) && idle.Count > 0)
-                return idle[0];
+            if (set.Anims.TryGetValue("idle", out idle) && idle.Count > 0) return idle[0];
             return null;
         }
 
@@ -200,7 +296,7 @@ namespace InkwellWorld.Game
         {
             EnsureLoaded();
             string name = (string)Reflect.GetField(player, "name");
-            string kit = KitStore.Get(name) ?? Entry.PendingCreateKit;
+            string kit = KitStore.Get(name) ?? Entry.PendingCreateKit ?? KitStore.GetActive();
             if (string.IsNullOrEmpty(kit)) return false;
             AnimSet set;
             if (!Sets.TryGetValue(kit, out set) || set.Anims.Count == 0) return false;
@@ -211,27 +307,19 @@ namespace InkwellWorld.Game
                 Play[who] = st = new AnimState();
 
             string want = PickAnim(player);
-            if (want != st.Anim)
-            {
-                st.Anim = want;
-                st.Frame = 0;
-                st.Timer = 0;
-            }
+            if (want != st.Anim) { st.Anim = want; st.Frame = 0; st.Timer = 0; }
             List<object> frames;
             if (!set.Anims.TryGetValue(st.Anim, out frames) || frames.Count == 0)
-            {
                 if (!set.Anims.TryGetValue("idle", out frames) || frames.Count == 0)
                     return false;
-            }
+
             st.Timer++;
-            int rate = st.Anim == "run" || st.Anim == "shoot" ? 4 : 6;
-            if (st.Timer >= rate)
+            if (st.Timer >= (st.Anim == "run" || st.Anim == "shoot" ? 4 : 6))
             {
                 st.Timer = 0;
                 st.Frame = (st.Frame + 1) % frames.Count;
             }
             object tex = frames[st.Frame % frames.Count];
-
             object spriteBatch = Reflect.GetStatic(_main, "spriteBatch");
             if (spriteBatch == null || tex == null) return false;
 
@@ -248,30 +336,20 @@ namespace InkwellWorld.Game
 
             int tw = (int)AccessTools.Property(tex.GetType(), "Width").GetValue(tex);
             int th = (int)AccessTools.Property(tex.GetType(), "Height").GetValue(tex);
-            // Fit Cuphead art to roughly player height (keep aspect).
-            float scale = (height * 1.35f) / Math.Max(8, th);
-            if (scale > 1.2f) scale = 1.2f;
-            if (scale < 0.25f) scale = 0.25f;
-
-            float drawW = tw * scale;
-            float drawH = th * scale;
-            float dx = px - sx + width * 0.5f - drawW * 0.5f;
-            float dy = py - sy + height - drawH;
+            float scale = (height * 1.5f) / Math.Max(8, th);
+            if (scale > 1.5f) scale = 1.5f;
+            if (scale < 0.2f) scale = 0.2f;
 
             object fx = dir < 0 ? _fxFlip : _fxNone;
             try
             {
-                // Draw(Texture2D, Vector2, Rectangle?, Color, float rotation, Vector2 origin, float scale, SpriteEffects, float layerDepth)
                 MethodInfo rich = null;
                 foreach (var m in spriteBatch.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
                 {
                     if (m.Name != "Draw") continue;
                     var ps = m.GetParameters();
                     if (ps.Length == 9 && ps[7].ParameterType.Name.Contains("SpriteEffects"))
-                    {
-                        rich = m;
-                        break;
-                    }
+                    { rich = m; break; }
                 }
                 if (rich == null) return false;
                 object origin = Activator.CreateInstance(_vector2, tw * 0.5f, (float)th);
@@ -293,8 +371,6 @@ namespace InkwellWorld.Game
                 object vel = Reflect.GetField(player, "velocity");
                 float vx = (float)vel.GetType().GetField("X").GetValue(vel);
                 float vy = (float)vel.GetType().GetField("Y").GetValue(vel);
-                bool mount = false;
-                try { mount = (bool)(Reflect.GetField(Reflect.GetField(player, "mount"), "Active") ?? false); } catch { }
                 if (Math.Abs(vy) > 0.8f) return "jump";
                 bool shooting = (bool)(Reflect.GetStatic(_main, "mouseLeft") ?? false);
                 if (shooting) return "shoot";

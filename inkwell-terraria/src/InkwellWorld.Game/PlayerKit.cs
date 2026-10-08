@@ -168,7 +168,7 @@ namespace InkwellWorld.Game
                 {
                     rt.AnnounceCd = 600;
                     Entry.Log("Kit active " + rt.KitId + " meter=" + rt.Meter.ToString("0.00")
-                        + " sprites=" + CupheadSprites.HasKit(rt.KitId));
+                        + " | " + CupheadSprites.StatusLine());
                 }
                 else rt.AnnounceCd--;
             }
