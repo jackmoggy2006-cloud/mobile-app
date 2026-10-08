@@ -1,0 +1,62 @@
+{
+  "sheet": "characters",
+  "description": "Playable Cuphead cast offered on Terraria character create. Art and ability params come from the player's Cuphead install.",
+  "key": "id",
+  "columns": {
+    "id": { "type": "string", "desc": "Character id." },
+    "display_name": { "type": "string", "desc": "Name on the create screen." },
+    "cuphead_atlas": { "type": "string", "desc": "Key in the prepared Cuphead cache (atlas_player entry)." },
+    "default_shot": { "type": "ref", "ref": "abilities", "desc": "Default weapon / continuous shot." },
+    "ex_move": { "type": "ref", "ref": "abilities", "desc": "EX / super move." },
+    "parry": { "type": "ref", "ref": "abilities", "desc": "Parry ability." },
+    "dash": { "type": "ref", "ref": "abilities", "desc": "Dash or dodge-roll." },
+    "extra_mobility": { "type": "ref", "ref": "abilities", "desc": "Extra mobility (none or Chalice double-jump).", "allow": ["none"] },
+    "skin_hair": { "type": "int", "desc": "Vanilla Terraria hair id used as a fallback silhouette before Cuphead art loads." },
+    "skin_variant": { "type": "int", "desc": "Vanilla Terraria skinVariant fallback." },
+    "stage": { "type": "enum", "values": ["1a", "1b", "2"], "desc": "Stage that ships this character." }
+  },
+  "rows": [
+    {
+      "id": "cuphead",
+      "display_name": "Cuphead",
+      "cuphead_atlas": "player_cuphead",
+      "default_shot": "peashooter",
+      "ex_move": "energy_beam_ex",
+      "parry": "parry_slap",
+      "dash": "dash",
+      "extra_mobility": "none",
+      "skin_hair": 15,
+      "skin_variant": 0,
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "mugman",
+      "display_name": "Mugman",
+      "cuphead_atlas": "player_mugman",
+      "default_shot": "peashooter",
+      "ex_move": "energy_beam_ex",
+      "parry": "parry_slap",
+      "dash": "dash",
+      "extra_mobility": "none",
+      "skin_hair": 1,
+      "skin_variant": 1,
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "chalice",
+      "display_name": "Ms. Chalice",
+      "cuphead_atlas": "player_chalice",
+      "default_shot": "peashooter",
+      "ex_move": "energy_beam_ex",
+      "parry": "parry_slap",
+      "dash": "chalice_roll",
+      "extra_mobility": "chalice_double_jump",
+      "skin_hair": 36,
+      "skin_variant": 3,
+      "stage": "1a",
+      "_unverified": {}
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "sheet": "systems",
+  "description": "Every game system the mashup touches.",
+  "key": "id",
+  "columns": {
+    "id": { "type": "string", "desc": "System id." },
+    "description": { "type": "string", "desc": "What it does." },
+    "stage": { "type": "enum", "values": ["1a", "1b", "2"], "desc": "Stage that builds it." },
+    "hooks": { "type": "ref[]", "ref": "hooks", "desc": "Patches into Terraria it uses." },
+    "code": { "type": "string", "desc": "Where the code lives." }
+  },
+  "rows": [
+    {
+      "id": "launcher",
+      "description": "InkwellWorld.exe next to Terraria.exe loads Terraria in-process (x86, large-address-aware), applies Harmony patches, then runs Terraria.WindowsLaunch.Main. Game files are never changed.",
+      "stage": "1a",
+      "hooks": ["terraria_entry"],
+      "code": "src/InkwellWorld.Launcher/Program.cs",
+      "_unverified": {}
+    },
+    {
+      "id": "cuphead_assets",
+      "description": "Melty ownCopies finds Cuphead; CupPrepare extracts player atlas frames into a cache. The mod reads only that cache (and shows an in-game message if Cuphead is missing).",
+      "stage": "1a",
+      "hooks": ["load_content"],
+      "code": "src/InkwellWorld.Core/Cuphead/; src/CupPrepare/",
+      "_unverified": {}
+    },
+    {
+      "id": "character_create",
+      "description": "On Terraria character create, offer Cuphead, Mugman and Ms. Chalice. Choosing one applies fallback vanity and stores the Cuphead kit id for that player file.",
+      "stage": "1a",
+      "hooks": ["draw_menu", "create_player"],
+      "code": "src/InkwellWorld.Game/CharacterCreate.cs",
+      "_unverified": {}
+    },
+    {
+      "id": "player_kit",
+      "description": "While playing as a Cuphead cast member: Peashooter, EX, parry, dash/roll, Chalice double-jump. Spawn already armed.",
+      "stage": "1a",
+      "hooks": ["player_update", "player_hurt", "draw_player"],
+      "code": "src/InkwellWorld.Game/PlayerKit.cs",
+      "_unverified": {}
+    },
+    {
+      "id": "bindings",
+      "description": "Parry on X / Square-equivalent (keyboard X), dash on Left Shift; shots on mouse. Documented on first launch.",
+      "stage": "1a",
+      "hooks": ["player_update"],
+      "code": "src/InkwellWorld.Game/Bindings.cs",
+      "_unverified": {}
+    }
+  ]
+}

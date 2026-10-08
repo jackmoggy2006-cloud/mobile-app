@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    InkwellWorld.Game.dll: Harmony patches resolved at runtime against the loaded Terraria.exe.
+    No compile-time Terraria/XNA reference — builds on Linux CI and on PCs without Terraria in the default path.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>InkwellWorld.Game</AssemblyName>
+    <RootNamespace>InkwellWorld.Game</RootNamespace>
+    <Version>0.1.0</Version>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InkwellWorld.Core\InkwellWorld.Core.csproj" />
+  </ItemGroup>
+</Project>
