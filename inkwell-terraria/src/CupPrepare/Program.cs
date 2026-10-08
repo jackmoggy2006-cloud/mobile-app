@@ -4,9 +4,7 @@ using System.Text.Json;
 namespace CupPrepare;
 
 /// <summary>
-/// Melty ownCopies prepare step: read the player's Cuphead folder, write a cache with ready.json.
-/// Prefers UnityPy (prepare_cuphead.py beside this exe) for real atlas frames; otherwise copies the
-/// player's atlas_player bundle into the cache so the mashup still uses real Cuphead files.
+/// Melty prepare step: extract real Cuphead player Sprites via bundled Python+UnityPy into cache/ready.json.
 /// </summary>
 static class Program
 {
@@ -30,114 +28,115 @@ static class Program
             Console.Error.WriteLine("Cuphead folder missing: " + cuphead);
             return 3;
         }
-        var data = new DirectoryInfo(Path.Combine(cup.FullName, "Cuphead_Data"));
-        if (!data.Exists)
-        {
-            Console.Error.WriteLine("Cuphead_Data missing under " + cuphead);
-            return 3;
-        }
 
         Directory.CreateDirectory(outDir);
-
-        // Prefer Python + UnityPy extractor shipped next to us.
-        string script = Path.Combine(AppContext.BaseDirectory, "prepare_cuphead.py");
-        if (File.Exists(script) && TryPython(script, cup.FullName, outDir))
+        string here = AppContext.BaseDirectory;
+        string script = Path.Combine(here, "prepare_cuphead.py");
+        if (!File.Exists(script))
         {
-            if (File.Exists(Path.Combine(outDir, "ready.json")))
-                return 0;
+            Console.Error.WriteLine("prepare_cuphead.py missing next to CupPrepare.exe");
+            return 4;
         }
 
-        // Fallback: copy real Cuphead atlas into the cache and write ready.json (no look-alike art).
-        string? atlas = FindAtlas(cup.FullName);
-        string rawDir = Path.Combine(outDir, "raw");
-        Directory.CreateDirectory(rawDir);
-        if (atlas != null)
-        {
-            string dest = Path.Combine(rawDir, "atlas_player");
-            File.Copy(atlas, dest, true);
-            Console.WriteLine("Copied " + atlas + " -> " + dest);
-        }
+        // Prefer bundled Windows embeddable Python (ships with UnityPy).
+        string bundled = Path.Combine(here, "python", "python.exe");
+        var pythons = new List<string>();
+        if (File.Exists(bundled)) pythons.Add(bundled);
+        pythons.AddRange(new[] { "python", "python3", "py" });
 
-        // Also keep a pointer file for sharedassets that Melty already staged.
-        foreach (var rel in new[]
-                 {
-                     "Cuphead_Data/sharedassets8.assets",
-                     "Cuphead_Data/sharedassets8.resource",
-                     "UnityPlayer.dll"
-                 })
-        {
-            string src = Path.Combine(cup.FullName, rel.Replace('/', Path.DirectorySeparatorChar));
-            if (File.Exists(src))
-            {
-                string d = Path.Combine(rawDir, Path.GetFileName(src));
-                File.Copy(src, d, true);
-            }
-        }
-
-        var characters = new Dictionary<string, object>();
-        foreach (var id in new[] { "cuphead", "mugman", "chalice" })
-        {
-            characters[id] = new Dictionary<string, object>
-            {
-                ["portrait"] = atlas != null ? "raw/atlas_player" : "",
-                ["frames"] = new List<string>(),
-                ["source"] = "cuphead-install"
-            };
-        }
-        var ready = new Dictionary<string, object?>
-        {
-            ["version"] = 1,
-            ["characters"] = characters,
-            ["atlas"] = atlas,
-            ["note"] = "Real Cuphead files staged. PNG frames appear when UnityPy prepare runs."
-        };
-        File.WriteAllText(Path.Combine(outDir, "ready.json"),
-            JsonSerializer.Serialize(ready, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine("Wrote ready.json");
-        return 0;
-    }
-
-    static string? FindAtlas(string cuphead)
-    {
-        string[] candidates =
-        {
-            Path.Combine(cuphead, "Cuphead_Data", "StreamingAssets", "AssetBundles", "atlas_player"),
-            Path.Combine(cuphead, "Cuphead_Data", "StreamingAssets", "AssetBundles", "Atlas_Player"),
-        };
-        foreach (var c in candidates)
-            if (File.Exists(c)) return c;
-        string root = Path.Combine(cuphead, "Cuphead_Data", "StreamingAssets");
-        if (!Directory.Exists(root)) return null;
-        foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-            if (Path.GetFileName(f).Contains("atlas_player", StringComparison.OrdinalIgnoreCase))
-                return f;
-        return null;
-    }
-
-    static bool TryPython(string script, string cuphead, string outDir)
-    {
-        foreach (var py in new[] { "python3", "python", "py" })
+        foreach (var py in pythons)
         {
             try
             {
                 var psi = new ProcessStartInfo
                 {
                     FileName = py,
-                    ArgumentList = { script, "--cuphead", cuphead, "--out", outDir },
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                 };
+                psi.ArgumentList.Add(script);
+                psi.ArgumentList.Add("--cuphead");
+                psi.ArgumentList.Add(cup.FullName);
+                psi.ArgumentList.Add("--out");
+                psi.ArgumentList.Add(outDir);
+                // Embeddable python: ensure local site-packages
+                string site = Path.Combine(here, "python", "Lib", "site-packages");
+                if (Directory.Exists(site))
+                    psi.Environment["PYTHONPATH"] = site + (psi.Environment.ContainsKey("PYTHONPATH") && psi.Environment["PYTHONPATH"] is string cur && cur.Length > 0 ? Path.PathSeparator + cur : "");
+
+                Console.WriteLine("Running " + py + " " + script);
                 using var p = Process.Start(psi);
                 if (p == null) continue;
-                p.WaitForExit(120_000);
-                Console.WriteLine(p.StandardOutput.ReadToEnd());
-                var err = p.StandardError.ReadToEnd();
-                if (!string.IsNullOrWhiteSpace(err)) Console.Error.WriteLine(err);
-                if (p.ExitCode == 0) return true;
+                string stdout = p.StandardOutput.ReadToEnd();
+                string stderr = p.StandardError.ReadToEnd();
+                if (!p.WaitForExit(300_000))
+                {
+                    try { p.Kill(); } catch { }
+                    Console.Error.WriteLine("Extractor timed out");
+                    continue;
+                }
+                Console.WriteLine(stdout);
+                if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.WriteLine(stderr);
+                if (p.ExitCode == 0 && File.Exists(Path.Combine(outDir, "ready.json")))
+                {
+                    // Marker Melty watches so an old stub ready.json does not skip re-extract.
+                    File.WriteAllText(Path.Combine(outDir, "extracted.ok"),
+                        DateTime.UtcNow.ToString("o") + "\n");
+                    Console.WriteLine("CupPrepare OK");
+                    return 0;
+                }
             }
-            catch { /* try next */ }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(py + ": " + ex.Message);
+            }
         }
-        return false;
+
+        // Last-resort: stage raw atlas so the game can still message, but mark not fully extracted.
+        Console.Error.WriteLine("Sprite extract failed — staging raw atlas only");
+        string? atlas = FindAtlas(cup.FullName);
+        string rawDir = Path.Combine(outDir, "raw");
+        Directory.CreateDirectory(rawDir);
+        if (atlas != null)
+            File.Copy(atlas, Path.Combine(rawDir, "atlas_player"), true);
+
+        var characters = new Dictionary<string, object>();
+        foreach (var id in new[] { "cuphead", "mugman", "chalice" })
+        {
+            characters[id] = new Dictionary<string, object>
+            {
+                ["portrait"] = "",
+                ["frames"] = new List<string>(),
+                ["animations"] = new Dictionary<string, List<string>>(),
+                ["frameCount"] = 0,
+            };
+        }
+        var ready = new Dictionary<string, object?>
+        {
+            ["version"] = 2,
+            ["characters"] = characters,
+            ["error"] = "UnityPy extract did not produce frames. Reinstall mashup so prepare/python is present.",
+        };
+        File.WriteAllText(Path.Combine(outDir, "ready.json"),
+            JsonSerializer.Serialize(ready, new JsonSerializerOptions { WriteIndented = true }));
+        // Exit 0 so Melty continues, but the game will show a clear banner when frameCount==0.
+        return 0;
+    }
+
+    static string? FindAtlas(string cuphead)
+    {
+        foreach (var c in new[]
+                 {
+                     Path.Combine(cuphead, "Cuphead_Data", "StreamingAssets", "AssetBundles", "atlas_player"),
+                     Path.Combine(cuphead, "raw", "atlas_player"),
+                     Path.Combine(cuphead, "atlas_player"),
+                 })
+            if (File.Exists(c)) return c;
+        if (!Directory.Exists(cuphead)) return null;
+        foreach (var f in Directory.EnumerateFiles(cuphead, "*", SearchOption.AllDirectories))
+            if (Path.GetFileName(f).Equals("atlas_player", StringComparison.OrdinalIgnoreCase))
+                return f;
+        return null;
     }
 }

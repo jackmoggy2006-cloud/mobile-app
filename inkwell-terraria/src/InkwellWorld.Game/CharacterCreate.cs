@@ -214,13 +214,13 @@ namespace InkwellWorld.Game
                 return;
             }
 
-            DrawText(spriteBatch, font, "INKWELL WORLD — click or press 1 / 2 / 3", x0, y0 - 22, 1f, 0.95f, 0.4f);
+            CupheadSprites.EnsureLoaded();
+            DrawText(spriteBatch, font, "INKWELL WORLD — click portrait or press 1 / 2 / 3", x0, y0 - 22, 1f, 0.95f, 0.4f);
             if (!string.IsNullOrEmpty(Entry.PendingCreateKit))
                 DrawText(spriteBatch, font, "Selected: " + Entry.PendingCreateKit + " (finish Create)", x0, y0 - 44, 0.5f, 1f, 0.5f);
 
             int mouseX = (int)(Reflect.GetStatic(_main, "mouseX") ?? 0);
             int mouseY = (int)(Reflect.GetStatic(_main, "mouseY") ?? 0);
-            // Terraria: mouseLeftRelease fires on the release frame.
             bool click = (bool)(Reflect.GetStatic(_main, "mouseLeftRelease") ?? false);
 
             int i = 0;
@@ -229,16 +229,48 @@ namespace InkwellWorld.Game
                 if (ch.Stage != "1a") continue;
                 int x = x0 + i * 170;
                 int y = y0;
-                bool over = mouseX >= x && mouseX < x + 160 && mouseY >= y && mouseY < y + 48;
+                bool over = mouseX >= x && mouseX < x + 160 && mouseY >= y && mouseY < y + 72;
                 bool selected = string.Equals(Entry.PendingCreateKit, ch.Id, StringComparison.OrdinalIgnoreCase);
+                object portrait = CupheadSprites.GetPortrait(ch.Id);
+                if (portrait != null)
+                    DrawPortrait(spriteBatch, portrait, x, y - 56, 48, 48);
                 float r = selected ? 1f : (over ? 1f : 0.85f);
                 float g = selected ? 0.9f : (over ? 0.95f : 0.75f);
                 float b = selected ? 0.2f : (over ? 0.35f : 0.95f);
                 DrawText(spriteBatch, font, (i + 1) + ") " + ch.DisplayName, x, y, r, g, b);
-                DrawText(spriteBatch, font, "armed spawn", x, y + 20, 0.7f, 0.7f, 0.7f);
+                DrawText(spriteBatch, font, "real Cuphead art", x, y + 20, 0.7f, 0.7f, 0.7f);
                 if (over && click)
                     ApplyKit(ch, uiCreateInstance);
                 i++;
+            }
+        }
+
+        static void DrawPortrait(object spriteBatch, object tex, int x, int y, int w, int h)
+        {
+            try
+            {
+                Type rectT = _terraria.GetType("Microsoft.Xna.Framework.Rectangle")
+                    ?? Type.GetType("Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework");
+                Type colorT = _terraria.GetType("Microsoft.Xna.Framework.Color")
+                    ?? Type.GetType("Microsoft.Xna.Framework.Color, Microsoft.Xna.Framework");
+                if (rectT == null || colorT == null) return;
+                object dest = Activator.CreateInstance(rectT, x, y, w, h);
+                object white = colorT.GetProperty("White")?.GetValue(null)
+                    ?? Activator.CreateInstance(colorT, (byte)255, (byte)255, (byte)255, (byte)255);
+                foreach (var m in spriteBatch.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (m.Name != "Draw") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length == 3 && ps[1].ParameterType == rectT)
+                    {
+                        m.Invoke(spriteBatch, new[] { tex, dest, white });
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Entry.Log("portrait: " + ex.Message);
             }
         }
 

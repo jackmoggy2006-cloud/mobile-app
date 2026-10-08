@@ -72,9 +72,11 @@ namespace InkwellWorld.Game
             try
             {
                 _harmony = new Harmony("gg.melty.inkwellworld");
+                CupheadSprites.Init(_terraria);
                 CharacterCreate.Patch(_harmony, _terraria);
                 PlayerKit.Patch(_harmony, _terraria);
                 MenuBanner.Patch(_harmony, _terraria);
+                CupheadSprites.EnsureLoaded();
                 foreach (var h in Hooks.All)
                 {
                     if (h.Patch == "call") continue;

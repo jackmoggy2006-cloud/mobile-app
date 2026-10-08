@@ -6,9 +6,7 @@ using System.Text;
 namespace InkwellWorld.Cuphead
 {
     /// <summary>
-    /// Reads Melty/CupPrepare output under CacheDir. Never ships Cuphead files; only the player's prepared cache.
-    /// ready.json shape:
-    /// { "version": 1, "characters": { "cuphead": { "portrait": "cuphead_portrait.png", "frames": ["..."] }, ... } }
+    /// Reads Melty/CupPrepare output. ready.json v2 includes animations{ idle:[...], run:[...], ... }.
     /// </summary>
     public sealed class CupheadCache
     {
@@ -21,6 +19,8 @@ namespace InkwellWorld.Cuphead
         {
             public string PortraitPath;
             public List<string> FramePaths = new List<string>();
+            public Dictionary<string, List<string>> Animations = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            public int FrameCount;
         }
 
         public static CupheadCache Open(string cacheDir)
@@ -45,6 +45,13 @@ namespace InkwellWorld.Cuphead
                     return new CupheadCache(cacheDir, false,
                         "Cuphead cache has no characters. Reinstall the mashup or repair Cuphead.");
                 }
+                int frames = 0;
+                foreach (var kv in cache.Characters) frames += kv.Value.FrameCount;
+                if (frames == 0)
+                {
+                    return new CupheadCache(cacheDir, false,
+                        "Cuphead was found but player sprites were not extracted. Update Inkwell Terraria and press Play again (CupPrepare needs prepare/python).");
+                }
                 return cache;
             }
             catch (Exception ex)
@@ -62,44 +69,88 @@ namespace InkwellWorld.Cuphead
 
         void ParseReady(string json)
         {
-            // Minimal JSON walk — avoid a NuGet dependency in Core.
-            int chars = json.IndexOf("\"characters\"", StringComparison.Ordinal);
-            if (chars < 0) return;
             foreach (string id in new[] { "cuphead", "mugman", "chalice" })
             {
                 string key = "\"" + id + "\"";
-                int at = json.IndexOf(key, chars, StringComparison.OrdinalIgnoreCase);
+                int at = json.IndexOf(key, StringComparison.OrdinalIgnoreCase);
                 if (at < 0) continue;
+                // Limit search to this character's object (until next sibling or end)
+                int objStart = json.IndexOf('{', at);
+                if (objStart < 0) continue;
+                int depth = 0, objEnd = objStart;
+                for (int i = objStart; i < json.Length; i++)
+                {
+                    if (json[i] == '{') depth++;
+                    else if (json[i] == '}')
+                    {
+                        depth--;
+                        if (depth == 0) { objEnd = i; break; }
+                    }
+                }
+                string body = json.Substring(objStart, objEnd - objStart + 1);
                 var art = new CharacterArt();
-                art.PortraitPath = FindStringAfter(json, at, "\"portrait\"");
-                art.FramePaths = FindStringArrayAfter(json, at, "\"frames\"");
-                if (!string.IsNullOrEmpty(art.PortraitPath))
-                    art.PortraitPath = Path.Combine(Root, art.PortraitPath.Replace('/', Path.DirectorySeparatorChar));
-                for (int i = 0; i < art.FramePaths.Count; i++)
-                    art.FramePaths[i] = Path.Combine(Root, art.FramePaths[i].Replace('/', Path.DirectorySeparatorChar));
+                art.PortraitPath = Rel(FindString(body, "\"portrait\""));
+                art.FramePaths = RelAll(FindStringArray(body, "\"frames\""));
+                art.FrameCount = art.FramePaths.Count;
+                // animations object
+                int animAt = body.IndexOf("\"animations\"", StringComparison.Ordinal);
+                if (animAt >= 0)
+                {
+                    foreach (string anim in new[] { "idle", "run", "jump", "shoot", "dash", "duck", "parry", "ex", "hit" })
+                    {
+                        var frames = RelAll(FindStringArray(body, "\"" + anim + "\""));
+                        if (frames.Count > 0)
+                            art.Animations[anim] = frames;
+                    }
+                }
+                if (art.FrameCount == 0 && art.Animations.Count > 0)
+                {
+                    foreach (var kv in art.Animations)
+                        art.FramePaths.AddRange(kv.Value);
+                    art.FrameCount = art.FramePaths.Count;
+                }
                 Characters[id] = art;
             }
         }
 
-        static string FindStringAfter(string json, int from, string key)
+        string Rel(string rel)
         {
-            int k = json.IndexOf(key, from, StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(rel)) return null;
+            return Path.Combine(Root, rel.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        List<string> RelAll(List<string> rels)
+        {
+            var list = new List<string>();
+            foreach (var r in rels)
+            {
+                string p = Rel(r);
+                if (!string.IsNullOrEmpty(p)) list.Add(p);
+            }
+            return list;
+        }
+
+        static string FindString(string json, string key)
+        {
+            int k = json.IndexOf(key, StringComparison.Ordinal);
             if (k < 0) return null;
             int colon = json.IndexOf(':', k);
             int q1 = json.IndexOf('"', colon + 1);
+            if (q1 < 0) return null;
             int q2 = json.IndexOf('"', q1 + 1);
-            if (q1 < 0 || q2 < 0) return null;
+            if (q2 < 0) return null;
             return json.Substring(q1 + 1, q2 - q1 - 1);
         }
 
-        static List<string> FindStringArrayAfter(string json, int from, string key)
+        static List<string> FindStringArray(string json, string key)
         {
             var list = new List<string>();
-            int k = json.IndexOf(key, from, StringComparison.Ordinal);
+            int k = json.IndexOf(key, StringComparison.Ordinal);
             if (k < 0) return list;
             int lb = json.IndexOf('[', k);
+            if (lb < 0) return list;
             int rb = json.IndexOf(']', lb);
-            if (lb < 0 || rb < 0) return list;
+            if (rb < 0) return list;
             string body = json.Substring(lb + 1, rb - lb - 1);
             var sb = new StringBuilder();
             bool inStr = false;

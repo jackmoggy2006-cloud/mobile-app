@@ -59,6 +59,7 @@ namespace InkwellWorld.Game
             if (drawPlayer != null)
                 harmony.Patch(drawPlayer, prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPrefix)));
 
+            CupheadSprites.Init(terraria);
             Entry.Log("PlayerKit patched");
         }
 
@@ -308,10 +309,20 @@ namespace InkwellWorld.Game
             return true;
         }
 
-        static bool DrawPlayerPrefix(object __instance, object drawPlayer /* first arg often Player */)
+        // Harmony prefix: first parameter after __instance for instance method is the Player being drawn.
+        static bool DrawPlayerPrefix(object __instance, object drawPlayer)
         {
-            // Keep vanilla draw for v1; Cuphead atlas overlay is stage 1b once textures are bound to XNA Texture2D.
-            // Portraits already prove Cuphead cache on the create screen path.
+            try
+            {
+                object player = drawPlayer ?? __instance;
+                // Main.DrawPlayer(Player, ...) — on instance Main, first arg is Player.
+                if (player != null && player.GetType().Name == "Player" && CupheadSprites.TryDrawPlayer(player))
+                    return false; // skip vanilla body — Cuphead avatar drawn
+            }
+            catch (Exception ex)
+            {
+                Entry.Log("DrawPlayer: " + ex.Message);
+            }
             return true;
         }
     }

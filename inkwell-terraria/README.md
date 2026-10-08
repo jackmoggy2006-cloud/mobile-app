@@ -8,6 +8,8 @@ Play **Terraria** as **Cuphead**, **Mugman**, or **Ms. Chalice** — picked on c
 - Cuphead (Steam)
 - [Melty](https://melty.gg) — press Play (one click)
 
+On first Play, Melty runs **CupPrepare**, which pulls **real Cuphead player Sprites** (idle / run / jump / shoot / dash) from your install into a local cache. Those frames are what you see in-game — nothing from Cuphead is in the Melty download.
+
 ## Controls (Cuphead kit)
 
 | Action | Input |

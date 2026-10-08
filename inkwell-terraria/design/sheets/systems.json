@@ -20,10 +20,10 @@
     },
     {
       "id": "cuphead_assets",
-      "description": "Melty ownCopies finds Cuphead; CupPrepare extracts player atlas frames into a cache. The mod reads only that cache (and shows an in-game message if Cuphead is missing).",
+      "description": "Melty ownCopies finds Cuphead; CupPrepare (UnityPy) extracts real player Sprites into a cache with idle/run/jump/shoot/dash clips. The mod loads those PNGs as Texture2D and draws animated avatars (never ships Cuphead files).",
       "stage": "1a",
-      "hooks": ["load_content"],
-      "code": "src/InkwellWorld.Core/Cuphead/; src/CupPrepare/",
+      "hooks": ["load_content", "draw_player"],
+      "code": "src/InkwellWorld.Core/Cuphead/; src/CupPrepare/; src/InkwellWorld.Game/CupheadSprites.cs",
       "_unverified": {}
     },
     {

@@ -44,7 +44,7 @@
           "path": "{managed}/prepare/CupPrepare.exe",
           "args": ["--cuphead", "{managed}/own/cuphead", "--out", "{managed}/own/cuphead/cache"]
         },
-        "done": { "file": "{managed}/own/cuphead/cache/ready.json" }
+        "done": { "file": "{managed}/own/cuphead/cache/extracted.ok" }
       }
     }
   ],
