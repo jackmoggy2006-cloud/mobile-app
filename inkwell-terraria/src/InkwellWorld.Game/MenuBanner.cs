@@ -36,6 +36,15 @@ namespace InkwellWorld.Game
         {
             try
             {
+                // Only draw when we have something to say — constant HUD was noisy/costly.
+                string line = Entry.BannerFrames > 0 ? Entry.BannerMessage : null;
+                if (string.IsNullOrEmpty(line))
+                {
+                    if (_statusCd-- > 0) return;
+                    _statusCd = 180;
+                    _cachedStatus = "Inkwell " + CupheadSprites.StatusLine() + " | F1/F2/F3";
+                    line = _cachedStatus;
+                }
                 var spriteBatch = Reflect.GetStatic(_main, "spriteBatch");
                 var font = Reflect.GetStatic(_main, "fontMouseText");
                 if (spriteBatch == null || font == null) return;
@@ -45,20 +54,6 @@ namespace InkwellWorld.Game
                 Type v2 = _terraria.GetType("Microsoft.Xna.Framework.Vector2")
                     ?? Type.GetType("Microsoft.Xna.Framework.Vector2, Microsoft.Xna.Framework");
                 if (utils == null || colorT == null || v2 == null) return;
-
-                string line = Entry.BannerFrames > 0 && !string.IsNullOrEmpty(Entry.BannerMessage)
-                    ? Entry.BannerMessage
-                    : null;
-                if (line == null)
-                {
-                    if (_statusCd-- <= 0 || _cachedStatus == null)
-                    {
-                        _statusCd = 120;
-                        _cachedStatus = "Inkwell " + CupheadSprites.StatusLine() + " | F1/F2/F3";
-                    }
-                    line = _cachedStatus;
-                }
-                if (string.IsNullOrEmpty(line)) return;
 
                 object color = Activator.CreateInstance(colorT, (byte)255, (byte)220, (byte)80, (byte)255);
                 object pos = Activator.CreateInstance(v2, 24f, 24f);

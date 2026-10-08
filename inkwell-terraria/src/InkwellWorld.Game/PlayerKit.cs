@@ -78,25 +78,30 @@ namespace InkwellWorld.Game
                 break;
             }
 
-            // Terraria 1.4 draws via LegacyPlayerRenderer — Main.DrawPlayer alone never runs.
+            // Terraria 1.4: LegacyPlayerRenderer.DrawPlayer is the real path.
+            // Prefix: make vanilla fully transparent (shadow=1) when Cuphead art is ready.
+            // Postfix: draw Cuphead (spriteBatch is active — no load work here).
             int drawPatches = 0;
-            foreach (var m in _main.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
-            {
-                if (m.Name != "DrawPlayer") continue;
-                harmony.Patch(m, prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPrefix)));
-                drawPatches++;
-            }
             Type legacy = terraria.GetType("Terraria.Graphics.Renderers.LegacyPlayerRenderer");
             if (legacy != null)
             {
                 foreach (var m in legacy.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
                     if (m.Name != "DrawPlayer") continue;
-                    harmony.Patch(m, prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPrefix)));
+                    harmony.Patch(m,
+                        prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerHidePrefix)),
+                        postfix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPostfix)));
                     drawPatches++;
                 }
             }
-            // Any other IPlayerRenderer impls (ReturnGate, etc.) — skip; we only need the main body.
+            foreach (var m in _main.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (m.Name != "DrawPlayer") continue;
+                harmony.Patch(m,
+                    prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerHidePrefix)),
+                    postfix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPostfix)));
+                drawPatches++;
+            }
 
             CupheadSprites.Init(terraria);
             Entry.Log("PlayerKit patched; DrawPlayer hooks=" + drawPatches
@@ -147,16 +152,18 @@ namespace InkwellWorld.Game
                 var rt = StateFor(__instance);
                 if (rt == null)
                 {
-                    // Nudge once
                     if (_abilityLogCd <= 0)
                     {
                         _abilityLogCd = 300;
-                        Entry.BannerMessage = "Inkwell: press F1=Cuphead F2=Mugman F3=Ms.Chalice in-world";
+                        Entry.BannerMessage = "Inkwell: press F1=Cuphead F2=Mugman F3=Ms.Chalice — " + CupheadSprites.StatusLine();
                         Entry.BannerFrames = 60 * 6;
                     }
                     else _abilityLogCd--;
                     return;
                 }
+
+                // Load art here (once), never inside Draw — that was the lag.
+                CupheadSprites.EnsureKit(rt.KitId);
 
                 var ch = Characters.Get(rt.KitId);
                 TickCd(rt);
@@ -470,44 +477,56 @@ namespace InkwellWorld.Game
             return true;
         }
 
-        /// <summary>
-        /// Prefixed on Main.DrawPlayer AND LegacyPlayerRenderer.DrawPlayer.
-        /// Player may be args[0] (Main) or args[1] (Legacy: Camera, Player, ...).
-        /// </summary>
-        static bool DrawPlayerPrefix(object __instance, object[] __args)
+        /// <summary>When Cuphead art is ready, force shadow=1 so the Terraria body is invisible.</summary>
+        static void DrawPlayerHidePrefix(object[] __args)
         {
             try
             {
                 object player = FindPlayerArg(__args);
-                if (player == null) return true;
-                // Menu character dolls: still draw Cuphead if that save is a kit (name-bound).
-                bool local = IsLocal(player);
-                var rt = StateFor(player);
-                if (rt == null)
+                if (player == null) return;
+                string name = (string)Reflect.GetField(player, "name");
+                string kit = KitStore.Get(name);
+                if (string.IsNullOrEmpty(kit) && IsLocal(player))
+                    kit = Entry.PendingCreateKit ?? KitStore.GetActive();
+                if (string.IsNullOrEmpty(kit) || !CupheadSprites.HasKit(kit)) return;
+                // Legacy: (camera, player, pos, rot, origin, shadow, scale) — shadow is float near the end.
+                // Main.DrawPlayer: (player, pos, rot, origin, shadow?, scale?) — find last float before optional scale.
+                for (int i = __args.Length - 1; i >= 0; i--)
                 {
-                    // Local with no kit yet — nudge, keep vanilla
-                    return true;
+                    if (__args[i] is float)
+                    {
+                        // Prefer the shadow slot (second-to-last float if two floats at end)
+                        int shadowIdx = i;
+                        if (i > 0 && __args[i - 1] is float) shadowIdx = i - 1;
+                        __args[shadowIdx] = 1f; // fully transparent vanilla body
+                        return;
+                    }
                 }
-                if (!local && KitStore.Get((string)Reflect.GetField(player, "name")) == null)
-                    return true; // don't restyle unrelated multiplayer bodies via active_kit
-                if (CupheadSprites.TryDrawPlayer(player))
+            }
+            catch { }
+        }
+
+        /// <summary>Draw Cuphead after vanilla (spriteBatch is mid-pass). No loading here.</summary>
+        static void DrawPlayerPostfix(object[] __args)
+        {
+            try
+            {
+                object player = FindPlayerArg(__args);
+                if (player == null) return;
+                string name = (string)Reflect.GetField(player, "name");
+                string kit = KitStore.Get(name);
+                if (string.IsNullOrEmpty(kit) && IsLocal(player))
+                    kit = Entry.PendingCreateKit ?? KitStore.GetActive();
+                if (string.IsNullOrEmpty(kit) || !CupheadSprites.HasKit(kit)) return;
+                if (CupheadSprites.TryDrawPlayer(player) && IsLocal(player))
                 {
-                    if (local) DrawKitLabel(player, rt.KitId, rt.Meter);
-                    return false; // hide Terraria vanity — show Cuphead only
+                    var rt = StateFor(player);
+                    if (rt != null) DrawKitLabel(player, rt.KitId, rt.Meter);
                 }
-                if (local && _abilityLogCd <= 0)
-                {
-                    _abilityLogCd = 300;
-                    Entry.BannerMessage = "Kit " + rt.KitId + " but no art yet — " + CupheadSprites.StatusLine();
-                    Entry.BannerFrames = 60 * 8;
-                    Entry.Log("DrawPlayer: kit bound, art missing | " + CupheadSprites.StatusLine());
-                }
-                return true;
             }
             catch (Exception ex)
             {
-                if (_abilityLogCd <= 0) { Entry.Log("DrawPlayer: " + ex.Message); _abilityLogCd = 180; }
-                return true;
+                if (_abilityLogCd <= 0) { Entry.Log("DrawPlayerPost: " + ex.Message); _abilityLogCd = 180; }
             }
         }
 

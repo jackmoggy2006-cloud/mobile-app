@@ -23,6 +23,7 @@ namespace InkwellWorld.Game
         static int _lastLoggedMode = int.MinValue;
         static int _logCooldown;
         static int _createGuard; // debounce
+        static bool _portraitsTried;
 
         public static void Patch(Harmony harmony, Assembly terraria)
         {
@@ -347,7 +348,7 @@ namespace InkwellWorld.Game
             object spriteBatch = Reflect.GetStatic(_main, "spriteBatch");
             object font = Reflect.GetStatic(_main, "fontMouseText") ?? Reflect.GetStatic(_main, "fontDeathText");
             if (spriteBatch == null || font == null) return;
-            TryBeginSpriteBatch(spriteBatch);
+            // Do NOT SpriteBatch.Begin here — breaks Terraria's UI batch and causes lag.
 
             int sh = (int)(Reflect.GetStatic(_main, "screenHeight") ?? 600);
             int x0 = 24;
@@ -365,12 +366,19 @@ namespace InkwellWorld.Game
                 return;
             }
 
-            CupheadSprites.EnsureLoaded();
-            DrawText(spriteBatch, font, "CREATE CUPHEAD KIT — click or press 1 / 2 / 3  (saves a character)", x0, y0 - 22, 1f, 0.95f, 0.4f);
+            DrawText(spriteBatch, font, "CREATE CUPHEAD KIT — 1/2/3  |  " + CupheadSprites.StatusLine(), x0, y0 - 22, 1f, 0.95f, 0.4f);
 
             int mouseX = (int)(Reflect.GetStatic(_main, "mouseX") ?? 0);
             int mouseY = (int)(Reflect.GetStatic(_main, "mouseY") ?? 0);
             bool click = (bool)(Reflect.GetStatic(_main, "mouseLeftRelease") ?? false);
+
+            // Portraits: load at most one kit attempt per overlay call (avoids create-screen lag).
+            if (!_portraitsTried)
+            {
+                _portraitsTried = true;
+                foreach (var ch in Characters.All)
+                    if (ch.Stage == "1a") CupheadSprites.EnsureKit(ch.Id);
+            }
 
             int i = 0;
             foreach (var ch in Characters.All)
@@ -379,7 +387,7 @@ namespace InkwellWorld.Game
                 int x = x0 + i * 180;
                 int y = y0;
                 bool over = mouseX >= x && mouseX < x + 170 && mouseY >= y - 56 && mouseY < y + 50;
-                object portrait = CupheadSprites.GetPortrait(ch.Id);
+                object portrait = CupheadSprites.HasKit(ch.Id) ? CupheadSprites.GetPortrait(ch.Id) : null;
                 if (portrait != null)
                     DrawPortrait(spriteBatch, portrait, x, y - 56, 48, 48);
                 float r = over ? 1f : 0.85f;

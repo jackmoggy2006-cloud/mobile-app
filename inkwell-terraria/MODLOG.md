@@ -22,3 +22,4 @@ Cloud Linux agent: no Steam Terraria/Cuphead installed. Game.dll uses runtime re
 - Release **0.3.2**: named `cuphead_`/`mugman_`/`chalice_` sprites only; `atlas_chalice` + mugshots; DrawPlayer **prefix** hides Terraria body; `extracted.v6.ok` forces re-prepare. Cuphead must be **installed**, not running.
 - Release **0.3.3**: black-screen fix — removed per-pixel ImageSharp Activator load + StatusLine↔EnsureLoaded recursion; lazy FromStream per kit; DrawPlayer only for local player.
 - Release **0.3.4**: hook **LegacyPlayerRenderer.DrawPlayer** (1.4 actual draw path); Main.DrawPlayer alone never ran so avatars never appeared.
+- Release **0.3.5**: lag fix — never load PNGs from Draw; cache failed loads; create-screen batch Begin removed; draw Cuphead in postfix + hide vanilla via shadow=1.
