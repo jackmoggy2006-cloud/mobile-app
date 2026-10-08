@@ -40,20 +40,46 @@ namespace InkwellWorld.Game
 
         static readonly Dictionary<int, AnimState> Play = new Dictionary<int, AnimState>();
 
+        public static bool HasKit(string kitId)
+        {
+            EnsureLoaded();
+            return !string.IsNullOrEmpty(kitId) && Sets.ContainsKey(kitId) && Sets[kitId].Anims.Count > 0;
+        }
+
+        static Type FindType(string fullName)
+        {
+            var t = Type.GetType(fullName)
+                ?? Type.GetType(fullName + ", Microsoft.Xna.Framework")
+                ?? Type.GetType(fullName + ", Microsoft.Xna.Framework.Graphics")
+                ?? Type.GetType(fullName + ", FNA");
+            if (t != null) return t;
+            if (_terraria != null)
+            {
+                t = _terraria.GetType(fullName);
+                if (t != null) return t;
+            }
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    t = a.GetType(fullName);
+                    if (t != null) return t;
+                }
+                catch { }
+            }
+            return null;
+        }
+
         public static void Init(Assembly terraria)
         {
             _terraria = terraria;
             _main = Reflect.Type(terraria, "Terraria.Main");
-            _texture2D = Type.GetType("Microsoft.Xna.Framework.Graphics.Texture2D, Microsoft.Xna.Framework.Graphics")
-                ?? terraria.GetType("Microsoft.Xna.Framework.Graphics.Texture2D");
-            _color = Type.GetType("Microsoft.Xna.Framework.Color, Microsoft.Xna.Framework")
-                ?? terraria.GetType("Microsoft.Xna.Framework.Color");
-            _vector2 = Type.GetType("Microsoft.Xna.Framework.Vector2, Microsoft.Xna.Framework")
-                ?? terraria.GetType("Microsoft.Xna.Framework.Vector2");
-            _rectangle = Type.GetType("Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework")
-                ?? terraria.GetType("Microsoft.Xna.Framework.Rectangle");
-            _spriteEffects = Type.GetType("Microsoft.Xna.Framework.Graphics.SpriteEffects, Microsoft.Xna.Framework.Graphics")
-                ?? terraria.GetType("Microsoft.Xna.Framework.Graphics.SpriteEffects");
+            _texture2D = FindType("Microsoft.Xna.Framework.Graphics.Texture2D");
+            _color = FindType("Microsoft.Xna.Framework.Color");
+            _vector2 = FindType("Microsoft.Xna.Framework.Vector2");
+            _rectangle = FindType("Microsoft.Xna.Framework.Rectangle");
+            _spriteEffects = FindType("Microsoft.Xna.Framework.Graphics.SpriteEffects");
+            Entry.Log("CupheadSprites types tex=" + (_texture2D != null) + " color=" + (_color != null));
             if (_color != null)
                 _white = _color.GetProperty("White")?.GetValue(null)
                     ?? Activator.CreateInstance(_color, (byte)255, (byte)255, (byte)255, (byte)255);
@@ -97,13 +123,19 @@ namespace InkwellWorld.Game
                 }
                 foreach (var kv in Entry.Cache.Characters)
                     LoadCharacter(kv.Key, kv.Value, gd);
-                _loaded = true;
-                Entry.Log("CupheadSprites loaded for " + Sets.Count + " characters");
+                _loaded = Sets.Count > 0;
+                if (!_loaded)
+                {
+                    Entry.Log("CupheadSprites: no anim sets from cache (frame PNGs missing?)");
+                    // allow retry next frame if GraphicsDevice was early
+                }
+                else
+                    Entry.Log("CupheadSprites loaded for " + Sets.Count + " characters");
             }
             catch (Exception ex)
             {
-                _failed = true;
                 Entry.Log("CupheadSprites load failed: " + ex);
+                // don't permanently fail — retry
             }
         }
 

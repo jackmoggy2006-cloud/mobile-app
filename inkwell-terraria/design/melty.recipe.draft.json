@@ -8,7 +8,7 @@
   "components": [
     {
       "id": "main",
-      "fileName": "inkwell-terraria-0.2.1.zip",
+      "fileName": "inkwell-terraria-0.3.0.zip",
       "label": "Inkwell Terraria",
       "kind": "main",
       "required": true
@@ -44,7 +44,7 @@
           "path": "{managed}/prepare/CupPrepare.exe",
           "args": ["--cuphead", "{managed}/own/cuphead", "--out", "{managed}/own/cuphead/cache"]
         },
-        "done": { "file": "{managed}/own/cuphead/cache/extracted.v3.ok" }
+        "done": { "file": "{managed}/own/cuphead/cache/extracted.v4.ok" }
       }
     }
   ],

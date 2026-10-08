@@ -65,8 +65,8 @@ namespace InkwellWorld.Game
 
             bool sprites = Entry.Cache != null && Entry.Cache.Ready;
             Entry.BannerMessage = sprites
-                ? "Inkwell World: press 1/2/3 to CREATE Cuphead / Mugman / Ms.Chalice (saved characters)"
-                : (Entry.Cache?.Message ?? "Cuphead sprites not ready — check CupPrepare");
+                ? "Inkwell: create with 1/2/3 here, OR enter a world and press F1/F2/F3 for Cuphead/Mugman/Chalice"
+                : (Entry.Cache?.Message ?? "Cuphead sprites not ready — delete cache folder and Play again");
             Entry.BannerFrames = 60 * 25;
             Entry.Log("CharacterCreate patched; cacheReady=" + sprites);
         }

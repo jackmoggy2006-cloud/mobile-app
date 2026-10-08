@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace CupPrepare;
 
 /// <summary>
-/// Melty prepare step: extract real Cuphead player Sprites via bundled Python+UnityPy into cache/ready.json.
+/// Melty prepare: extract real Cuphead Sprites via bundled Python+UnityPy.
+/// Prefers the full Steam Cuphead install (complete atlas) over Melty's partial copy.
 /// </summary>
 static class Program
 {
@@ -22,14 +24,18 @@ static class Program
             return 2;
         }
 
-        var cup = new DirectoryInfo(cuphead);
-        if (!cup.Exists)
+        Directory.CreateDirectory(outDir);
+
+        // Prefer full Steam install for complete sprites; fall back to Melty-staged folder.
+        string extractFrom = FindSteamCuphead() ?? cuphead;
+        if (!Directory.Exists(extractFrom))
         {
-            Console.Error.WriteLine("Cuphead folder missing: " + cuphead);
+            Console.Error.WriteLine("Cuphead folder missing: " + extractFrom);
             return 3;
         }
+        Console.WriteLine("Extracting from: " + extractFrom);
+        File.WriteAllText(Path.Combine(outDir, "extract_source.txt"), extractFrom);
 
-        Directory.CreateDirectory(outDir);
         string here = AppContext.BaseDirectory;
         string script = Path.Combine(here, "prepare_cuphead.py");
         if (!File.Exists(script))
@@ -38,7 +44,6 @@ static class Program
             return 4;
         }
 
-        // Prefer bundled Windows embeddable Python (ships with UnityPy).
         string bundled = Path.Combine(here, "python", "python.exe");
         var pythons = new List<string>();
         if (File.Exists(bundled)) pythons.Add(bundled);
@@ -57,15 +62,14 @@ static class Program
                 };
                 psi.ArgumentList.Add(script);
                 psi.ArgumentList.Add("--cuphead");
-                psi.ArgumentList.Add(cup.FullName);
+                psi.ArgumentList.Add(extractFrom);
                 psi.ArgumentList.Add("--out");
                 psi.ArgumentList.Add(outDir);
-                // Embeddable python: ensure local site-packages
                 string site = Path.Combine(here, "python", "Lib", "site-packages");
                 if (Directory.Exists(site))
-                    psi.Environment["PYTHONPATH"] = site + (psi.Environment.ContainsKey("PYTHONPATH") && psi.Environment["PYTHONPATH"] is string cur && cur.Length > 0 ? Path.PathSeparator + cur : "");
+                    psi.Environment["PYTHONPATH"] = site;
 
-                Console.WriteLine("Running " + py + " " + script);
+                Console.WriteLine("Running " + py);
                 using var p = Process.Start(psi);
                 if (p == null) continue;
                 string stdout = p.StandardOutput.ReadToEnd();
@@ -73,19 +77,15 @@ static class Program
                 if (!p.WaitForExit(300_000))
                 {
                     try { p.Kill(); } catch { }
-                    Console.Error.WriteLine("Extractor timed out");
                     continue;
                 }
                 Console.WriteLine(stdout);
                 if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.WriteLine(stderr);
                 if (p.ExitCode == 0 && File.Exists(Path.Combine(outDir, "ready.json")))
                 {
-                    // Marker Melty watches so an old stub ready.json does not skip re-extract.
-                    File.WriteAllText(Path.Combine(outDir, "extracted.v3.ok"),
-                        DateTime.UtcNow.ToString("o") + "\n");
-                    // Keep legacy marker too
-                    File.WriteAllText(Path.Combine(outDir, "extracted.ok"),
-                        DateTime.UtcNow.ToString("o") + "\n");
+                    File.WriteAllText(Path.Combine(outDir, "extracted.v4.ok"), DateTime.UtcNow.ToString("o"));
+                    File.WriteAllText(Path.Combine(outDir, "extracted.v3.ok"), DateTime.UtcNow.ToString("o"));
+                    File.WriteAllText(Path.Combine(outDir, "extracted.ok"), DateTime.UtcNow.ToString("o"));
                     Console.WriteLine("CupPrepare OK");
                     return 0;
                 }
@@ -96,50 +96,64 @@ static class Program
             }
         }
 
-        // Last-resort: stage raw atlas so the game can still message, but mark not fully extracted.
-        Console.Error.WriteLine("Sprite extract failed — staging raw atlas only");
-        string? atlas = FindAtlas(cup.FullName);
-        string rawDir = Path.Combine(outDir, "raw");
-        Directory.CreateDirectory(rawDir);
-        if (atlas != null)
-            File.Copy(atlas, Path.Combine(rawDir, "atlas_player"), true);
-
+        Console.Error.WriteLine("Sprite extract failed");
         var characters = new Dictionary<string, object>();
         foreach (var id in new[] { "cuphead", "mugman", "chalice" })
-        {
             characters[id] = new Dictionary<string, object>
             {
-                ["portrait"] = "",
-                ["frames"] = new List<string>(),
-                ["animations"] = new Dictionary<string, List<string>>(),
-                ["frameCount"] = 0,
+                ["portrait"] = "", ["frames"] = new List<string>(),
+                ["animations"] = new Dictionary<string, List<string>>(), ["frameCount"] = 0
             };
-        }
-        var ready = new Dictionary<string, object?>
-        {
-            ["version"] = 2,
-            ["characters"] = characters,
-            ["error"] = "UnityPy extract did not produce frames. Reinstall mashup so prepare/python is present.",
-        };
         File.WriteAllText(Path.Combine(outDir, "ready.json"),
-            JsonSerializer.Serialize(ready, new JsonSerializerOptions { WriteIndented = true }));
-        // Exit 0 so Melty continues, but the game will show a clear banner when frameCount==0.
+            JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["version"] = 2, ["characters"] = characters,
+                ["error"] = "extract failed — see prepare log"
+            }, new JsonSerializerOptions { WriteIndented = true }));
         return 0;
     }
 
-    static string? FindAtlas(string cuphead)
+    /// <summary>Locate Steam Cuphead (app 268910) via libraryfolders.vdf.</summary>
+    static string? FindSteamCuphead()
     {
-        foreach (var c in new[]
-                 {
-                     Path.Combine(cuphead, "Cuphead_Data", "StreamingAssets", "AssetBundles", "atlas_player"),
-                     Path.Combine(cuphead, "raw", "atlas_player"),
-                     Path.Combine(cuphead, "atlas_player"),
-                 })
-            if (File.Exists(c)) return c;
-        if (!Directory.Exists(cuphead)) return null;
-        foreach (var f in Directory.EnumerateFiles(cuphead, "*", SearchOption.AllDirectories))
-            if (Path.GetFileName(f).Equals("atlas_player", StringComparison.OrdinalIgnoreCase))
-                return f;
+        var roots = new List<string>();
+        string? prog = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        if (!string.IsNullOrEmpty(prog))
+            roots.Add(Path.Combine(prog, "Steam"));
+        string? pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrEmpty(pf))
+            roots.Add(Path.Combine(pf, "Steam"));
+        string? home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(home))
+        {
+            roots.Add(Path.Combine(home, "Steam"));
+            roots.Add(Path.Combine(home, "AppData", "Local", "Steam"));
+        }
+
+        foreach (var steam in roots)
+        {
+            string vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
+            if (!File.Exists(vdf))
+            {
+                // Default library only
+                string def = Path.Combine(steam, "steamapps", "common", "Cuphead");
+                if (Directory.Exists(Path.Combine(def, "Cuphead_Data"))) return def;
+                continue;
+            }
+            string text = File.ReadAllText(vdf);
+            foreach (Match m in Regex.Matches(text, "\"path\"\\s+\"([^\"]+)\""))
+            {
+                string lib = m.Groups[1].Value.Replace("\\\\", "\\");
+                string cup = Path.Combine(lib, "steamapps", "common", "Cuphead");
+                if (Directory.Exists(Path.Combine(cup, "Cuphead_Data")))
+                {
+                    Console.WriteLine("Found Steam Cuphead at " + cup);
+                    return cup;
+                }
+            }
+            string fallback = Path.Combine(steam, "steamapps", "common", "Cuphead");
+            if (Directory.Exists(Path.Combine(fallback, "Cuphead_Data"))) return fallback;
+        }
         return null;
     }
 }
