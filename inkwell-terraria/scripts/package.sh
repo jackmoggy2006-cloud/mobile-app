@@ -40,7 +40,7 @@ else
   cp -a "$ROOT/dist/python-bundle/." "$OUT/prepare/python/"
 fi
 
-VER=0.3.2
+VER=0.3.3
 ZIP="$ROOT/dist/inkwell-terraria-${VER}.zip"
 rm -f "$ZIP"
 ( cd "$OUT" && zip -r "$ZIP" . -x '*.pdb' )

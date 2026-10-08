@@ -104,7 +104,10 @@ namespace InkwellWorld.Game
         {
             int who = (int)(Reflect.GetField(player, "whoAmI") ?? 0);
             string name = (string)Reflect.GetField(player, "name");
-            string kit = KitStore.Get(name) ?? Entry.PendingCreateKit ?? KitStore.GetActive();
+            // Bound by character name first; global F1/F2/F3 active only for the local player.
+            string kit = KitStore.Get(name);
+            if (string.IsNullOrEmpty(kit) && IsLocal(player))
+                kit = Entry.PendingCreateKit ?? KitStore.GetActive();
             if (string.IsNullOrEmpty(kit)) return null;
             Runtime rt;
             if (!States.TryGetValue(who, out rt) || rt.KitId != kit)
@@ -193,7 +196,7 @@ namespace InkwellWorld.Game
                 + (kitId == "chalice" ? ", Space double-jump" : "");
             Entry.BannerFrames = 60 * 8;
             Entry.Log("Activated kit " + kitId + " on " + name);
-            CupheadSprites.EnsureLoaded();
+            CupheadSprites.EnsureKit(kitId);
         }
 
         static bool Control(object player, string field)
@@ -452,7 +455,7 @@ namespace InkwellWorld.Game
             return true;
         }
 
-        /// <summary>Return false to skip Terraria's body when real Cuphead art draws.</summary>
+        /// <summary>Return false to skip Terraria's body when real Cuphead art draws (local kit only).</summary>
         static bool DrawPlayerPrefix(object __instance, object[] __args)
         {
             try
@@ -460,16 +463,16 @@ namespace InkwellWorld.Game
                 if (__args == null || __args.Length < 1) return true;
                 object player = __args[0];
                 if (player == null || player.GetType().Name != "Player") return true;
+                // Never touch non-local draws — menu previews / other slots stay vanilla.
+                if (!IsLocal(player)) return true;
                 var rt = StateFor(player);
                 if (rt == null) return true;
-                CupheadSprites.EnsureLoaded();
                 if (CupheadSprites.TryDrawPlayer(player))
                 {
                     DrawKitLabel(player, rt.KitId, rt.Meter);
                     return false; // hide Terraria vanity — show Cuphead only
                 }
                 // Art missing: keep vanilla so the player is never invisible
-                DrawKitLabel(player, rt.KitId + " (sprites loading…)", rt.Meter);
                 return true;
             }
             catch (Exception ex)

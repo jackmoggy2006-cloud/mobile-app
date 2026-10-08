@@ -76,7 +76,8 @@ namespace InkwellWorld.Game
                 CharacterCreate.Patch(_harmony, _terraria);
                 PlayerKit.Patch(_harmony, _terraria);
                 MenuBanner.Patch(_harmony, _terraria);
-                CupheadSprites.EnsureLoaded();
+                // Do NOT load all Cuphead textures here — that froze the game (black screen).
+                // Frames load lazily when F1/F2/F3 or a named kit draws.
                 foreach (var h in Hooks.All)
                 {
                     if (h.Patch == "call") continue;

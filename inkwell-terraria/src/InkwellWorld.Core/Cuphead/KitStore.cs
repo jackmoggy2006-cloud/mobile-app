@@ -51,17 +51,17 @@ namespace InkwellWorld.Cuphead
         public static string Get(string playerName)
         {
             EnsureLoaded();
-            if (!string.IsNullOrEmpty(playerName))
-            {
-                string id;
-                if (Map.TryGetValue(playerName, out id)) return id;
-                // Fuzzy: name contains cuphead / mugman / chalice
-                string n = playerName.ToLowerInvariant();
-                if (n.Contains("chalice")) return "chalice";
-                if (n.Contains("mugman") || n == "mm") return "mugman";
-                if (n.Contains("cuphead") || n == "cup") return "cuphead";
-            }
-            return _active;
+            if (string.IsNullOrEmpty(playerName)) return null;
+            string id;
+            if (Map.TryGetValue(playerName, out id)) return id;
+            // Fuzzy: name contains cuphead / mugman / chalice
+            string n = playerName.ToLowerInvariant();
+            if (n.Contains("chalice")) return "chalice";
+            if (n.Contains("mugman") || n == "mm") return "mugman";
+            if (n.Contains("cuphead") || n == "cup") return "cuphead";
+            // Do NOT fall back to global active here — that made every menu preview
+            // a Cuphead draw and could skip vanilla DrawPlayer for the whole UI.
+            return null;
         }
 
         static void EnsureLoaded()
