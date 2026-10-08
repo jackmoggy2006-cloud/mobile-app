@@ -29,9 +29,11 @@ namespace InkwellWorld.Game
                 Entry.BannerFrames--;
         }
 
+        static int _statusCd;
+        static string _cachedStatus;
+
         static void Draw()
         {
-            if (Entry.BannerFrames <= 0 || string.IsNullOrEmpty(Entry.BannerMessage)) return;
             try
             {
                 var spriteBatch = Reflect.GetStatic(_main, "spriteBatch");
@@ -43,8 +45,23 @@ namespace InkwellWorld.Game
                 Type v2 = _terraria.GetType("Microsoft.Xna.Framework.Vector2")
                     ?? Type.GetType("Microsoft.Xna.Framework.Vector2, Microsoft.Xna.Framework");
                 if (utils == null || colorT == null || v2 == null) return;
+
+                string line = Entry.BannerFrames > 0 && !string.IsNullOrEmpty(Entry.BannerMessage)
+                    ? Entry.BannerMessage
+                    : null;
+                if (line == null)
+                {
+                    if (_statusCd-- <= 0 || _cachedStatus == null)
+                    {
+                        _statusCd = 120;
+                        _cachedStatus = "Inkwell " + CupheadSprites.StatusLine() + " | F1/F2/F3";
+                    }
+                    line = _cachedStatus;
+                }
+                if (string.IsNullOrEmpty(line)) return;
+
                 object color = Activator.CreateInstance(colorT, (byte)255, (byte)220, (byte)80, (byte)255);
-                object pos = Activator.CreateInstance(v2, 40f, 40f);
+                object pos = Activator.CreateInstance(v2, 24f, 24f);
                 foreach (var m in utils.GetMethods(BindingFlags.Static | BindingFlags.Public))
                 {
                     if (m.Name != "DrawBorderString") continue;
@@ -52,11 +69,11 @@ namespace InkwellWorld.Game
                     if (ps.Length < 4) continue;
                     object[] args = new object[ps.Length];
                     args[0] = spriteBatch;
-                    args[1] = Entry.BannerMessage;
+                    args[1] = line;
                     args[2] = pos;
                     args[3] = color;
                     for (int i = 4; i < ps.Length; i++)
-                        args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : (ps[i].ParameterType == typeof(float) ? 1f : 0);
+                        args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : (ps[i].ParameterType == typeof(float) ? 0.9f : 0);
                     m.Invoke(null, args);
                     break;
                 }

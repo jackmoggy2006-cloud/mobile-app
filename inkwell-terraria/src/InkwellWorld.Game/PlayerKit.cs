@@ -78,15 +78,30 @@ namespace InkwellWorld.Game
                 break;
             }
 
-            // Replace vanilla Terraria avatar when Cuphead frames load (prefix skips original).
+            // Terraria 1.4 draws via LegacyPlayerRenderer — Main.DrawPlayer alone never runs.
+            int drawPatches = 0;
             foreach (var m in _main.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (m.Name != "DrawPlayer") continue;
                 harmony.Patch(m, prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPrefix)));
+                drawPatches++;
             }
+            Type legacy = terraria.GetType("Terraria.Graphics.Renderers.LegacyPlayerRenderer");
+            if (legacy != null)
+            {
+                foreach (var m in legacy.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (m.Name != "DrawPlayer") continue;
+                    harmony.Patch(m, prefix: new HarmonyMethod(typeof(PlayerKit), nameof(DrawPlayerPrefix)));
+                    drawPatches++;
+                }
+            }
+            // Any other IPlayerRenderer impls (ReturnGate, etc.) — skip; we only need the main body.
 
             CupheadSprites.Init(terraria);
-            Entry.Log("PlayerKit patched; NewProjectile=" + (_newProj != null) + " GetSource=" + (_getSource != null));
+            Entry.Log("PlayerKit patched; DrawPlayer hooks=" + drawPatches
+                + " LegacyRenderer=" + (legacy != null)
+                + " NewProjectile=" + (_newProj != null) + " GetSource=" + (_getSource != null));
         }
 
         static bool IsLocal(object player)
@@ -455,24 +470,38 @@ namespace InkwellWorld.Game
             return true;
         }
 
-        /// <summary>Return false to skip Terraria's body when real Cuphead art draws (local kit only).</summary>
+        /// <summary>
+        /// Prefixed on Main.DrawPlayer AND LegacyPlayerRenderer.DrawPlayer.
+        /// Player may be args[0] (Main) or args[1] (Legacy: Camera, Player, ...).
+        /// </summary>
         static bool DrawPlayerPrefix(object __instance, object[] __args)
         {
             try
             {
-                if (__args == null || __args.Length < 1) return true;
-                object player = __args[0];
-                if (player == null || player.GetType().Name != "Player") return true;
-                // Never touch non-local draws — menu previews / other slots stay vanilla.
-                if (!IsLocal(player)) return true;
+                object player = FindPlayerArg(__args);
+                if (player == null) return true;
+                // Menu character dolls: still draw Cuphead if that save is a kit (name-bound).
+                bool local = IsLocal(player);
                 var rt = StateFor(player);
-                if (rt == null) return true;
+                if (rt == null)
+                {
+                    // Local with no kit yet — nudge, keep vanilla
+                    return true;
+                }
+                if (!local && KitStore.Get((string)Reflect.GetField(player, "name")) == null)
+                    return true; // don't restyle unrelated multiplayer bodies via active_kit
                 if (CupheadSprites.TryDrawPlayer(player))
                 {
-                    DrawKitLabel(player, rt.KitId, rt.Meter);
+                    if (local) DrawKitLabel(player, rt.KitId, rt.Meter);
                     return false; // hide Terraria vanity — show Cuphead only
                 }
-                // Art missing: keep vanilla so the player is never invisible
+                if (local && _abilityLogCd <= 0)
+                {
+                    _abilityLogCd = 300;
+                    Entry.BannerMessage = "Kit " + rt.KitId + " but no art yet — " + CupheadSprites.StatusLine();
+                    Entry.BannerFrames = 60 * 8;
+                    Entry.Log("DrawPlayer: kit bound, art missing | " + CupheadSprites.StatusLine());
+                }
                 return true;
             }
             catch (Exception ex)
@@ -480,6 +509,17 @@ namespace InkwellWorld.Game
                 if (_abilityLogCd <= 0) { Entry.Log("DrawPlayer: " + ex.Message); _abilityLogCd = 180; }
                 return true;
             }
+        }
+
+        static object FindPlayerArg(object[] args)
+        {
+            if (args == null) return null;
+            for (int i = 0; i < args.Length; i++)
+            {
+                object a = args[i];
+                if (a != null && a.GetType().Name == "Player") return a;
+            }
+            return null;
         }
 
         static void DrawKitLabel(object player, string kitId, float meter)
@@ -491,10 +531,10 @@ namespace InkwellWorld.Game
                 object pos = Reflect.GetField(player, "position");
                 object screen = Reflect.GetStatic(_main, "screenPosition");
                 if (pos == null || screen == null) return;
-                float px = (float)pos.GetType().GetField("X").GetValue(pos);
-                float py = (float)pos.GetType().GetField("Y").GetValue(pos);
-                float sx = (float)screen.GetType().GetField("X").GetValue(screen);
-                float sy = (float)screen.GetType().GetField("Y").GetValue(screen);
+                float px = Reflect.Vec(pos, "X");
+                float py = Reflect.Vec(pos, "Y");
+                float sx = Reflect.Vec(screen, "X");
+                float sy = Reflect.Vec(screen, "Y");
                 Type utils = _terraria.GetType("Terraria.Utils");
                 Type colorT = _terraria.GetType("Microsoft.Xna.Framework.Color")
                     ?? Type.GetType("Microsoft.Xna.Framework.Color, Microsoft.Xna.Framework");

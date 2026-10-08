@@ -297,10 +297,10 @@ namespace InkwellWorld.Game
             object pos = Reflect.GetField(player, "position");
             object screen = Reflect.GetStatic(_main, "screenPosition");
             if (pos == null || screen == null) return false;
-            float px = (float)pos.GetType().GetField("X").GetValue(pos);
-            float py = (float)pos.GetType().GetField("Y").GetValue(pos);
-            float sx = (float)screen.GetType().GetField("X").GetValue(screen);
-            float sy = (float)screen.GetType().GetField("Y").GetValue(screen);
+            float px = Reflect.Vec(pos, "X");
+            float py = Reflect.Vec(pos, "Y");
+            float sx = Reflect.Vec(screen, "X");
+            float sy = Reflect.Vec(screen, "Y");
             int width = (int)(Reflect.GetField(player, "width") ?? 20);
             int height = (int)(Reflect.GetField(player, "height") ?? 42);
             int dir = (int)(Reflect.GetField(player, "direction") ?? 1);

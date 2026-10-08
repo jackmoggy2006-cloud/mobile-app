@@ -9,7 +9,7 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>InkwellWorld.Game</AssemblyName>
     <RootNamespace>InkwellWorld.Game</RootNamespace>
-    <Version>0.3.3</Version>
+    <Version>0.3.4</Version>
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
