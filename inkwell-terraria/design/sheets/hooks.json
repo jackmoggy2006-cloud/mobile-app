@@ -1,0 +1,78 @@
+{
+  "sheet": "hooks",
+  "description": "Every patch into Terraria. Runtime Harmony patches only; no game file is modified.",
+  "key": "id",
+  "columns": {
+    "id": { "type": "string", "desc": "Hook id." },
+    "target": { "type": "string", "desc": "Type:Method in Terraria 1.4.5+." },
+    "patch": { "type": "enum", "values": ["prefix", "postfix", "transpiler", "call"], "desc": "Harmony patch kind ('call' = we call it)." },
+    "system": { "type": "ref", "ref": "systems", "desc": "Owning system." },
+    "purpose": { "type": "string", "desc": "Why." },
+    "stage": { "type": "enum", "values": ["1a", "1b", "2"], "desc": "Stage that needs it." }
+  },
+  "rows": [
+    {
+      "id": "terraria_entry",
+      "target": "Terraria.WindowsLaunch:Main(string[])",
+      "patch": "call",
+      "system": "launcher",
+      "purpose": "Terraria's normal start after our patches are registered.",
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "load_content",
+      "target": "Terraria.Main.OnEngineLoad",
+      "patch": "call",
+      "system": "cuphead_assets",
+      "purpose": "Apply Harmony patches once the engine is up; load Cuphead cache textures.",
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "draw_menu",
+      "target": "Terraria.Main:DrawMenu(GameTime)",
+      "patch": "postfix",
+      "system": "character_create",
+      "purpose": "Draw Cuphead / Mugman / Ms. Chalice picks on the character-create menu.",
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "create_player",
+      "target": "Terraria.Player:SavePlayer(bool, bool)",
+      "patch": "postfix",
+      "system": "character_create",
+      "purpose": "Persist which Cuphead kit is tied to this .plr when the player is saved from create.",
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "player_update",
+      "target": "Terraria.Player:Update(int)",
+      "patch": "postfix",
+      "system": "player_kit",
+      "purpose": "Run Peashooter, EX, parry, dash/roll and Chalice double-jump for Cuphead kits.",
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "player_hurt",
+      "target": "Terraria.Player:Hurt(PlayerDeathReason, int, int, bool, bool, bool, int, bool)",
+      "patch": "prefix",
+      "system": "player_kit",
+      "purpose": "Parry and dash i-frames cancel damage when active.",
+      "stage": "1a",
+      "_unverified": {}
+    },
+    {
+      "id": "draw_player",
+      "target": "Terraria.Main:DrawPlayer(Player, Vector2, float, Vector2, float, float, float)",
+      "patch": "prefix",
+      "system": "player_kit",
+      "purpose": "When Cuphead frames are loaded, draw them and skip Terraria's vanity body; otherwise keep vanilla draw.",
+      "stage": "1a",
+      "_unverified": {}
+    }
+  ]
+}

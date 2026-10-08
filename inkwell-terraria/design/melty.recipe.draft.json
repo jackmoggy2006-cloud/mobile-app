@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "mode": "installed",
+  "games": [
+    { "slug": "terraria", "role": "primary", "version": ">=1.4.5" },
+    { "slug": "custom-cuphead", "role": "secondary", "ownCopy": true }
+  ],
+  "components": [
+    {
+      "id": "main",
+      "fileName": "inkwell-terraria-0.3.5.zip",
+      "label": "Inkwell Terraria",
+      "kind": "main",
+      "required": true
+    }
+  ],
+  "requirements": [],
+  "mappings": [
+    { "component": "main", "from": "prepare/", "to": "{managed}/prepare" },
+    { "component": "main", "from": "README.md", "to": "{managed}" },
+    { "component": "main", "from": "", "to": "{game}" }
+  ],
+  "launch": {
+    "kind": "exe",
+    "path": "{game}/InkwellWorld.exe",
+    "cwd": "{game}"
+  },
+  "ownCopies": [
+    {
+      "game": "custom-cuphead",
+      "names": ["cuphead"],
+      "to": "{managed}/own/cuphead",
+      "disc": {
+        "files": [
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_player",
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_chalice",
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_mugshots",
+          "Cuphead_Data/StreamingAssets/AssetBundles/atlas_player_replace",
+          "UnityPlayer.dll"
+        ]
+      },
+      "prepare": {
+        "launch": {
+          "kind": "exe",
+          "path": "{managed}/prepare/CupPrepare.exe",
+          "args": ["--cuphead", "{managed}/own/cuphead", "--out", "{managed}/own/cuphead/cache"]
+        },
+        "done": { "file": "{managed}/own/cuphead/cache/extracted.v6.ok" }
+      }
+    }
+  ],
+  "settings": [
+    {
+      "file": "{localappdata}/InkwellWorld/settings.cfg",
+      "set": { "CacheDir": "{managed}/own/cuphead/cache" }
+    }
+  ],
+  "runtimeData": ["{localappdata}/InkwellWorld"]
+}
