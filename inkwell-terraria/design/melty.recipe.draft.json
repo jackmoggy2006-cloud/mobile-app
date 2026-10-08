@@ -8,7 +8,7 @@
   "components": [
     {
       "id": "main",
-      "fileName": "inkwell-terraria-0.1.0.zip",
+      "fileName": "inkwell-terraria-0.1.1.zip",
       "label": "Inkwell Terraria",
       "kind": "main",
       "required": true

@@ -29,7 +29,7 @@ dotnet publish "$ROOT/src/CupPrepare/CupPrepare.csproj" -c Release -r win-x64 --
 cp -f "$ROOT/src/CupPrepare/prepare_cuphead.py" "$OUT/prepare/"
 cp -f "$ROOT/README.md" "$OUT/"
 
-VER=0.1.0
+VER=0.1.1
 ZIP="$ROOT/dist/inkwell-terraria-${VER}.zip"
 rm -f "$ZIP"
 ( cd "$OUT" && zip -r "$ZIP" . )
